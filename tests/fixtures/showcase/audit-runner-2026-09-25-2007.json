@@ -1,0 +1,529 @@
+{
+ "rendered_at": "2026-09-26T00:07:38.921329+00:00",
+ "stale_sections": [],
+ "errors": [],
+ "panels": {
+  "monday": {
+   "overflows": [],
+   "values": [
+    {
+     "metric": "BTC price",
+     "value": "$84,067",
+     "source": "api.strategy.com bitcoinKpis"
+    },
+    {
+     "metric": "MSTR balance date",
+     "value": "2026-09-20",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "MSTR bitcoin bought",
+     "value": "950 BTC",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "MSTR total BTC held",
+     "value": "846,000 BTC",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "MSTR net common capital",
+     "value": "$0.0m",
+     "source": "SEC 8-K ATM table"
+    },
+    {
+     "metric": "MSTR preferred capital",
+     "value": "\u2212$174.0m",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "MSTR cash balance / change",
+     "value": "$6.09B / \u2212$310.0m ($5.04B reserve + $1.05B USD cash)",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "MSTR funding (raised + cash drawn)",
+     "value": "$136.0m",
+     "source": "derived"
+    },
+    {
+     "metric": "MSTR BTC (bitcoin cost)",
+     "value": "$75.7m",
+     "source": "SEC 8-K aggregate purchase price (data/strategy-weekly-8k.json)"
+    },
+    {
+     "metric": "MSTR DIVs (funding \u2212 BTC)",
+     "value": "$60.3m",
+     "source": "derived; 8-K dividends + interest $57.4m"
+    },
+    {
+     "metric": "MSTR NAV / share (est.)",
+     "value": "$133.17",
+     "source": "derived"
+    },
+    {
+     "metric": "MSTR BTC cost basis / average",
+     "value": "$63.80B / $75,416",
+     "source": "SEC 8-K (data/strategy-weekly-8k.json)"
+    },
+    {
+     "metric": "MSTR price / basic NAV",
+     "value": "1.19\u00d7",
+     "source": "derived"
+    },
+    {
+     "metric": "MSTR sats per share",
+     "value": "201,186 sats",
+     "source": "derived"
+    },
+    {
+     "metric": "MSTR amplification (BTC reserve \u00f7 net BTC reserve)",
+     "value": "1.25\u00d7 / \u22120.03\u00d7",
+     "source": "strategy.com KPI"
+    },
+    {
+     "metric": "MSTR USD cover (months)",
+     "value": "45.1 (3.8\u00d7 floor)",
+     "source": "strategy.com KPIs"
+    },
+    {
+     "metric": "MSTR 3-week BTC/share",
+     "value": "+0.11%",
+     "source": "since 2026-08-30"
+    },
+    {
+     "metric": "MSTR QTD BTC/share",
+     "value": "\u221211.63%",
+     "source": "derived"
+    },
+    {
+     "metric": "ASST balance date",
+     "value": "2026-09-18",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "ASST bitcoin bought",
+     "value": "1,355 BTC",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "ASST total BTC held",
+     "value": "26,355 BTC",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "ASST net common capital",
+     "value": "+$58.3m",
+     "source": "share change \u00d7 VWAP (est.)"
+    },
+    {
+     "metric": "ASST preferred capital",
+     "value": "+$78.6m",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "ASST cash balance / change",
+     "value": "$279.4m / +$25.3m ($229.6m cash + $49.8m STRC)",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "ASST funding (raised + cash drawn)",
+     "value": "$111.5m",
+     "source": "derived"
+    },
+    {
+     "metric": "ASST BTC (bitcoin cost)",
+     "value": "$107.7m",
+     "source": "strive.com dashboard purchase cost"
+    },
+    {
+     "metric": "ASST DIVs (funding \u2212 BTC)",
+     "value": "$3.8m",
+     "source": "derived"
+    },
+    {
+     "metric": "ASST NAV / share (est.)",
+     "value": "$14.19",
+     "source": "derived"
+    },
+    {
+     "metric": "ASST BTC cost basis / average",
+     "value": "$2.39B / $90,610",
+     "source": "strive.com dashboard cost basis"
+    },
+    {
+     "metric": "ASST price / basic NAV",
+     "value": "2.07\u00d7",
+     "source": "derived"
+    },
+    {
+     "metric": "ASST sats per share",
+     "value": "27,169 sats",
+     "source": "derived"
+    },
+    {
+     "metric": "ASST amplification ((debt + SATA notional) \u00f7 BTC value)",
+     "value": "1.50\u00d7 / \u22120.03\u00d7",
+     "source": "Strive's formula: 1 + (debt + SATA notional) \u00f7 BTC value"
+    },
+    {
+     "metric": "ASST USD cover (months)",
+     "value": "18.0 (at 18-mo goal)",
+     "source": "strive.com dashboard, SATA stated rate 13.0%"
+    },
+    {
+     "metric": "ASST 3-week BTC/share",
+     "value": "+9.43%",
+     "source": "since 2026-08-28"
+    },
+    {
+     "metric": "ASST QTD BTC/share",
+     "value": "+12.08%",
+     "source": "derived"
+    }
+   ],
+   "notes": [
+    "Capital raised = ATM issuance \u2212 repurchases, common and preferred. Cash is an existing balance, never counted as a raise. The waterfall reads down: common + preferred + cash drawn (or \u2212 cash kept) = BTC + DIVs. Strive's common figure is an estimate: net share change \u00d7 prior-week VWAP.",
+    "BTC = the week's bitcoin purchase cost, fees included (MSTR: SEC 8-K aggregate purchase price (data/strategy-weekly-8k.json) \u00b7 ASST: strive.com dashboard purchase cost). DIVs = the rest of the week's funding: preferred dividends and interest, plus fees and other uses. Strategy's 8-K put the week's dividends and interest at $57.4m; the difference is rounding in its $0.01B balances.",
+    "Amplification uses each issuer's own formula, shown in \u00d7. Strategy: BTC reserve \u00f7 net BTC reserve (BTC + USD \u2212 debt \u2212 preferred), its strategy.com KPI since July 23, 2026. Strive: 1 + (debt + SATA notional) \u00f7 BTC value, where the ratio is the \"Amplification Ratio\" on its treasury dashboard; Strive has no debt. The two measure different things and are not comparable. Weekly changes come from the filed balances.",
+    "NAV, price/NAV, coverage and growth are estimates from dated balances and reconstructed preferred claims at the displayed prices; growth holds prices constant.",
+    "USD cover = months of dividend (and, for Strategy, interest) obligations held in USD, read against Strategy's 12-month floor and Strive's 18-month goal. Coverage = (BTC + cash) \u00f7 annual obligations; break-even = obligations \u00f7 BTC value. MSTR: strategy.com KPIs \u00b7 ASST: strive.com dashboard, SATA stated rate 13.0%.",
+    "Multi-week growth window: MSTR since Aug 30 \u00b7 ASST since Aug 28.",
+    "Avg cost = aggregate bitcoin purchase price \u00f7 BTC held, fees included; vs cost = BTC price \u00f7 avg cost \u2212 1; cost basis = the aggregate purchase price. MSTR: SEC 8-K (data/strategy-weekly-8k.json) \u00b7 ASST: strive.com dashboard cost basis."
+   ]
+  },
+  "wednesday": {
+   "overflows": [],
+   "values": [
+    {
+     "metric": "STRD price",
+     "value": "73.72 USD",
+     "source": "strategy.com KPIs"
+    },
+    {
+     "metric": "STRD effective yield",
+     "value": "13.56%",
+     "source": "rate \u00d7 100 \u00f7 price"
+    },
+    {
+     "metric": "SATA price",
+     "value": "100.01 USD",
+     "source": "Yahoo Finance"
+    },
+    {
+     "metric": "SATA effective yield",
+     "value": "13.00%",
+     "source": "rate \u00d7 100 \u00f7 price"
+    },
+    {
+     "metric": "STRE price",
+     "value": "80.00 EUR",
+     "source": "strategy.com KPIs"
+    },
+    {
+     "metric": "STRE effective yield",
+     "value": "12.50%",
+     "source": "rate \u00d7 100 \u00f7 price"
+    },
+    {
+     "metric": "STRC price",
+     "value": "98.54 USD",
+     "source": "strategy.com KPIs"
+    },
+    {
+     "metric": "STRC effective yield",
+     "value": "12.18%",
+     "source": "rate \u00d7 100 \u00f7 price"
+    },
+    {
+     "metric": "STRK price",
+     "value": "74.89 USD",
+     "source": "strategy.com KPIs"
+    },
+    {
+     "metric": "STRK effective yield",
+     "value": "10.68%",
+     "source": "rate \u00d7 100 \u00f7 price"
+    },
+    {
+     "metric": "STRF price",
+     "value": "103.66 USD",
+     "source": "strategy.com KPIs"
+    },
+    {
+     "metric": "STRF effective yield",
+     "value": "9.65%",
+     "source": "rate \u00d7 100 \u00f7 price"
+    },
+    {
+     "metric": "SOFR",
+     "value": "3.88% (2026-09-24)",
+     "source": "FRED"
+    },
+    {
+     "metric": "3M bill",
+     "value": "4.24% (2026-09-25)",
+     "source": "FRED"
+    },
+    {
+     "metric": "10Y",
+     "value": "5.17% (2026-09-25)",
+     "source": "FRED"
+    },
+    {
+     "metric": "IG corp",
+     "value": "5.90% (2026-09-24)",
+     "source": "FRED"
+    },
+    {
+     "metric": "HY corp",
+     "value": "7.80% (2026-09-24)",
+     "source": "FRED"
+    },
+    {
+     "metric": "STRC spread over SOFR",
+     "value": "+830 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "STRC spread over 3M bill",
+     "value": "+794 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "STRC spread over 10Y",
+     "value": "+701 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "STRC spread over IG corp",
+     "value": "+628 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "STRC spread over HY corp",
+     "value": "+438 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "STRC closes \u2265 $100, last 20",
+     "value": "0",
+     "source": "Yahoo Finance"
+    },
+    {
+     "metric": "SATA spread over SOFR",
+     "value": "+912 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "SATA spread over 3M bill",
+     "value": "+876 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "SATA spread over 10Y",
+     "value": "+783 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "SATA spread over IG corp",
+     "value": "+710 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "SATA spread over HY corp",
+     "value": "+520 bp",
+     "source": "effective \u2212 benchmark"
+    },
+    {
+     "metric": "SATA closes \u2265 $100, last 20",
+     "value": "15",
+     "source": "Yahoo Finance"
+    },
+    {
+     "metric": "SATA Aug average close (rate cut allowed at \u2265 $99)",
+     "value": "$99.35",
+     "source": "Yahoo Finance"
+    },
+    {
+     "metric": "STRC BTC floor",
+     "value": "$13,265",
+     "source": "strategy.com /btc/credit btcFloor"
+    },
+    {
+     "metric": "SATA BTC floor",
+     "value": "$31,837",
+     "source": "(SATA notional + debt \u2212 cash and STRC held) \u00f7 BTC held"
+    },
+    {
+     "metric": "Strategy USD cover (months) vs floor",
+     "value": "45.1 vs 12",
+     "source": "(USD Reserve + USD Cash) \u00f7 current monthly dividends; weekly 8-K balances"
+    },
+    {
+     "metric": "Strive USD cover (months) vs goal",
+     "value": "18.0 vs 18",
+     "source": "Strive dashboard dividend reserve"
+    },
+    {
+     "metric": "Week of 2026-08-24 STRC net / SATA net",
+     "value": "\u2212$151.8m / +$80.3m",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "Week of 2026-08-31 STRC net / SATA net",
+     "value": "\u2212$176.3m / +$92.2m",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "Week of 2026-09-07 STRC net / SATA net",
+     "value": "\u2212$139.3m / +$40.3m",
+     "source": "SEC 8-K"
+    },
+    {
+     "metric": "Week of 2026-09-14 STRC net / SATA net",
+     "value": "\u2212$174.0m / +$78.6m",
+     "source": "SEC 8-K"
+    }
+   ],
+   "notes": [
+    "Effective yield = stated rate \u00d7 $100 \u00f7 price (Strategy KPIs; SATA's stated rate from Strive, whose daily dividend is the rate \u00f7 12 split over the month's business days). Spreads = effective yield \u2212 benchmark, in basis points. Headline benchmark: 3M bill \u2014 Strategy's stated risk-free rate and the bill Jeff Walton compares digital credit to; both preferreds reset monthly around $100 par.",
+    "Benchmarks from FRED: SOFR, DGS3MO (3M bill), DGS10 (10Y), ICE BofA US Corporate (IG) and High Yield effective yields, as of Sep 24.",
+    "26-week history uses each day's close, the stated rate in effect that day and the benchmark that day.",
+    "SATA rate cut: Strive may lower SATA's rate only if its closes over the prior month averaged at least $99 (August average $99.35, so a cut is allowed). A cut is capped at 0.25 pp plus any fall in SOFR, and the rate cannot go below 1-month term SOFR.",
+    "USD cover: Strategy (USD Reserve + USD Cash) \u00f7 current monthly dividends against its 12-month floor, each week's balances from its 8-K (USD Cash began Aug 23, 2026; earlier weeks are the USD Reserve alone); Strive's dashboard reserve against its 18-month goal.",
+    "Flow ledger: Strategy 8-K cash; SATA = net share change \u00d7 $100."
+   ]
+  },
+  "friday": {
+   "overflows": [],
+   "values": [
+    {
+     "metric": "Week ended",
+     "value": "2026-09-25",
+     "source": "exchange calendar"
+    },
+    {
+     "metric": "BTC Friday 4 pm mark",
+     "value": "$84,006",
+     "source": "Yahoo BTC-USD hourly"
+    },
+    {
+     "metric": "BTC weekly change",
+     "value": "+3.47%",
+     "source": "derived"
+    },
+    {
+     "metric": "BTC vs 200W SMA",
+     "value": "+28.4% (CHEAP)",
+     "source": "derived"
+    },
+    {
+     "metric": "50W SMA",
+     "value": "$78,721",
+     "source": "Friday closes"
+    },
+    {
+     "metric": "20W SMA / 21W EMA",
+     "value": "$69,769 / $72,422",
+     "source": "Friday closes"
+    },
+    {
+     "metric": "Weekly RSI(14)",
+     "value": "59.3",
+     "source": "Friday closes"
+    },
+    {
+     "metric": "DXY",
+     "value": "101.04",
+     "source": "Yahoo DX-Y.NYB"
+    },
+    {
+     "metric": "US 10Y",
+     "value": "5.18%",
+     "source": "Yahoo ^TNX"
+    },
+    {
+     "metric": "Fed funds \u2212 2Y",
+     "value": "-99 bp",
+     "source": "FRED DFF, DGS2"
+    },
+    {
+     "metric": "Fear & Greed",
+     "value": "73.0",
+     "source": "CoinMarketCap"
+    },
+    {
+     "metric": "Checklist \u00b7 50W SMA",
+     "value": "+6.7% (BULL)",
+     "source": "Fri mark vs $78.7k \u00b7 rule: bull above \u00b7 bear at/below"
+    },
+    {
+     "metric": "Checklist \u00b7 20W / 21W BAND",
+     "value": "above (BULL)",
+     "source": "$69.8k\u2013$72.4k \u00b7 rule: bull above \u00b7 bear below"
+    },
+    {
+     "metric": "Checklist \u00b7 50D / 200D",
+     "value": "golden cross (BULL)",
+     "source": "since Sep 8 \u00b7 rule: bull golden \u00b7 bear death"
+    },
+    {
+     "metric": "Checklist \u00b7 WEEKLY RSI",
+     "value": "59 (BULL)",
+     "source": "14 Friday closes \u00b7 50 line \u00b7 rule: bull \u2265 50 \u00b7 bear < 50"
+    },
+    {
+     "metric": "Checklist \u00b7 MVRV",
+     "value": "1.57 (NEUTRAL)",
+     "source": "realized $53.5k \u00b7 avg 1.80 \u00b7 rule: bull < 1 \u00b7 bear > avg + 1 sd"
+    },
+    {
+     "metric": "Checklist \u00b7 PUELL MULTIPLE",
+     "value": "1.01 (NEUTRAL)",
+     "source": "bands 0.38\u20133.16 \u00b7 rule: bull < low \u00b7 bear > high band"
+    },
+    {
+     "metric": "Checklist \u00b7 SUPPLY IN PROFIT",
+     "value": "71.6% (NEUTRAL)",
+     "source": "bottoms 40\u201350% \u00b7 heat 95%+ \u00b7 rule: bull < 50% \u00b7 bear > 95%"
+    },
+    {
+     "metric": "MSTR price / NAV",
+     "value": "\u2014",
+     "source": "derived"
+    },
+    {
+     "metric": "ASST price / NAV",
+     "value": "\u2014",
+     "source": "derived"
+    },
+    {
+     "metric": "BTC DVOL",
+     "value": "34.65 (2026-09-26)",
+     "source": "Deribit get_volatility_index_data"
+    },
+    {
+     "metric": "3M futures basis (annualized)",
+     "value": "4.95%",
+     "source": "Deribit BTC-25DEC26 mark \u00f7 index"
+    },
+    {
+     "metric": "stablecoin supply",
+     "value": "$312.33B (2026-09-25)",
+     "source": "DefiLlama stablecoincharts/all (peggedUSD)"
+    }
+   ],
+   "notes": [
+    "Every weekly reading is taken at the Friday 4:00 pm ET mark. Price/NAV uses estimated basic treasury NAV with Monday balances held fixed.",
+    "Cycle checklist rules (rule-based states, not forecasts): 50W SMA: bull above \u00b7 bear at/below; 20W / 21W BAND: bull above \u00b7 bear below; 50D / 200D: bull golden \u00b7 bear death; WEEKLY RSI: bull \u2265 50 \u00b7 bear < 50; MVRV: bull < 1 \u00b7 bear > avg + 1 sd; PUELL MULTIPLE: bull < low \u00b7 bear > high band; SUPPLY IN PROFIT: bull < 50% \u00b7 bear > 95%.",
+    "Zones = BTC's distance above its 200-week SMA: below 0 Very Cheap, 0\u201350% Cheap, 50\u2013100% Fair Value, 100\u2013150% Expensive, 150%+ Very Expensive (names after Crypto Currently).",
+    "Turnover = weekly shares traded \u00f7 basic shares (preferreds: notional \u00f7 $100). Strategy repurchased 1.77m STRC = 23% of STRC volume in the Sep 14\u2013Sep 20 filing week.",
+    "Fear & Greed: CoinMarketCap 3-day average; the regime is its current band.",
+    "Sources: Yahoo Finance \u00b7 CoinMarketCap \u00b7 Checkonchain \u00b7 FRED (DFF, DGS2) \u00b7 strategy.com."
+   ],
+   "demo_data": false
+  }
+ },
+ "monday_notice": null
+}

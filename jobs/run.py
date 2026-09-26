@@ -7,6 +7,8 @@
   python -m jobs.run gen-key                  # make a CODEX_AUTH_KEY
   python -m jobs.run upload-codex-auth [--path .codex-cloud/auth.json]
   python -m jobs.run test-discord
+  python -m jobs.run showcase --mode watch|once|preflight [--panel monday|wednesday|friday]
+                               --de-dir PATH --de-python PATH [--quiet]
 """
 from __future__ import annotations
 
@@ -38,6 +40,14 @@ def main(argv: list[str] | None = None) -> int:
     p_up = sub.add_parser("upload-codex-auth")
     p_up.add_argument("--path", default=str(ROOT / ".codex-cloud" / "auth.json"))
     sub.add_parser("test-discord")
+    p_sc = sub.add_parser("showcase", help="watch / re-check / preflight the Digital Credit Report showcase")
+    p_sc.add_argument("--mode", default="watch", choices=["watch", "once", "preflight"])
+    p_sc.add_argument("--panel", default="", help="monday | wednesday | friday (default: today's)")
+    p_sc.add_argument("--de-dir", default=os.environ.get("DE_DIR", "de"), help="digital-exposure checkout")
+    p_sc.add_argument("--de-python", default=os.environ.get("DE_PYTHON", sys.executable),
+                      help="Python with digital-exposure's requirements installed")
+    p_sc.add_argument("--quiet", action="store_true", help="no Discord alerts")
+    p_sc.add_argument("--plan", action="store_true", help="only print go=true|false for the workflow")
     p_style = sub.add_parser("load-style", help="load style-library entries from a JSON file")
     p_style.add_argument("path")
     args = ap.parse_args(argv)
@@ -69,6 +79,34 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "job":
         r = scheduler.run_job(args.name, trigger="manual")
+        print(json.dumps(r, indent=1, default=str))
+        return 0 if r.get("status") == "ok" else 1
+
+    if args.cmd == "showcase":
+        from xcp.agents import showcase_watch
+
+        if args.plan:
+            p = showcase_watch.plan(args.mode, args.panel or None)
+            lines = [f"go={'true' if p['go'] else 'false'}", f"panel={p.get('panel', '')}", f"reason={p['reason']}"]
+            out = os.environ.get("GITHUB_OUTPUT")
+            if out:
+                with open(out, "a", encoding="utf-8") as fh:
+                    fh.write("\n".join(lines) + "\n")
+            print("\n".join(lines))
+            return 0
+        de_dir = Path(args.de_dir).resolve()
+        if not (de_dir / "scripts" / "render_previews.py").exists():
+            print(f"digital-exposure checkout not found at {de_dir}", file=sys.stderr)
+            return 1
+        if args.mode == "preflight":
+            fn = lambda: showcase_watch.preflight(de_dir, args.de_python, quiet=args.quiet)  # noqa: E731
+            name = "showcase:preflight"
+        else:
+            fn = lambda: showcase_watch.watch(args.panel or None, args.mode, de_dir, args.de_python,  # noqa: E731
+                                              quiet=args.quiet)
+            name = f"showcase:{args.panel or 'today'}"
+        trigger = "manual" if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" else "schedule"
+        r = scheduler.run_job(name, trigger=trigger, fn=fn)
         print(json.dumps(r, indent=1, default=str))
         return 0 if r.get("status") == "ok" else 1
 

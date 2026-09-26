@@ -1,7 +1,5 @@
-"""🛠 Build Lab: AI-proposed creations, pipeline, and the Mon/Wed/Fri showcase lineup."""
+"""🛠 Build Lab: AI-proposed creations and their pipeline, plus the Mon/Wed/Fri showcase lineup (report panels)."""
 from __future__ import annotations
-
-from datetime import date
 
 import streamlit as st
 from sqlalchemy import select
@@ -32,28 +30,26 @@ def _move(idea_id: int, status: str) -> None:
         s.commit()
 
 
-def _assign(date_str: str, slot: str, key: str) -> None:
-    idea_id = st.session_state.get(key)
-    with db.session() as s:
-        for old in s.scalars(select(db.BuildIdea).where(db.BuildIdea.showcase_date == date_str,
-                                                        db.BuildIdea.showcase_slot == slot)):
-            old.showcase_date, old.showcase_slot = None, None
-        if idea_id:
-            i = s.get(db.BuildIdea, idea_id)
-            i.showcase_date, i.showcase_slot, i.updated_at = date_str, slot, utcnow()
-            if i.status == "inbox":
-                i.status = "shortlist"
-        s.commit()
+def _launch_text(idea: db.BuildIdea) -> str:
+    text = idea.launch_post or f"{idea.hook or idea.title}"
+    link = idea.shipped_url or idea.media_url
+    return f"{text}\n\n{link}" if link and link not in text else text
 
 
-def _showcase_now(idea_id: int, date_str: str, slot: str) -> None:
+def _launch_draft(idea_id: int, date_str: str, slot: str) -> None:
+    """A build's launch post goes to the Feed as a regular draft (showcase slots are the report panels)."""
     with db.session() as s:
-        if showcase.existing_showcase_draft(s, date_str, slot):
-            st.toast("A showcase draft already exists for that slot. It's in the Feed.", icon="ℹ️")
-            return
-        showcase.create_showcase_draft(s, s.get(db.BuildIdea, idea_id), slot, date_str)
+        idea = s.get(db.BuildIdea, idea_id)
+        d = db.Draft(slot=slot, slot_date=date_str, kind="regular", lane=idea.lane, pillar=idea.pillar,
+                     tone="analytical", status="new", score=50.0, title=f"Build launch: {idea.title}",
+                     build_idea_id=idea.id, chart_hint="none",
+                     inspiration=[{"label": "Build", "url": idea.shipped_url or idea.media_url or "",
+                                   "author": "Build Lab", "text": idea.hook or idea.title}])
+        s.add(d)
+        s.flush()
+        db.add_variant_version(s, d.id, "A", [_launch_text(idea)], "punchy", "tool:build_lab")
         s.commit()
-    st.toast("Showcase draft created in the Feed", icon="🛠")
+    st.toast("Launch draft added to the Feed", icon="🛠")
 
 
 @st.dialog("Build idea", width="large")
@@ -92,18 +88,17 @@ def idea_dialog(idea_id: int) -> None:
         st.markdown("**Launch post**")
         st.code(i.launch_post or "—", language=None, wrap_lines=True)
         if i.launch_post and owner:
-            st.link_button("🚀 Post launch on X", xtext.intent_post(showcase.default_showcase_text(i)))
+            st.link_button("🚀 Post launch on X", xtext.intent_post(_launch_text(i)))
         for n, f in enumerate(i.followups or [], 1):
             st.markdown(f"**Follow-up {n}**")
             st.code(f, language=None, wrap_lines=True)
         if owner:
             slots = config.settings()["slots"]
             c = st.columns([1.2, 1.2, 1])
-            d = c[0].date_input("Showcase date", value=date.fromisoformat(i.showcase_date) if i.showcase_date else today_ny(),
-                                key=f"scd_{i.id}")
-            sc_slots = showcase.showcase_slots(d) or list(slots)
-            sl = c[1].selectbox("Slot", sc_slots, key=f"scs_{i.id}", format_func=lambda k: slots.get(k, {}).get("label", k))
-            c[2].button("Create showcase draft", key=f"scn_{i.id}", on_click=_showcase_now, args=(i.id, d.isoformat(), sl),
+            d = c[0].date_input("Post date", value=today_ny(), key=f"scd_{i.id}")
+            sl = c[1].selectbox("Slot", list(slots), key=f"scs_{i.id}",
+                                format_func=lambda k: slots.get(k, {}).get("label", k))
+            c[2].button("Add launch draft", key=f"scn_{i.id}", on_click=_launch_draft, args=(i.id, d.isoformat(), sl),
                         type="primary", help="Puts the launch post in the Feed for that slot")
     if owner:
         with tabs[3]:
@@ -145,28 +140,21 @@ def idea_dialog(idea_id: int) -> None:
 
 with db.session() as s:
     ideas = list(s.scalars(select(db.BuildIdea).order_by(db.BuildIdea.created_at.desc())).all())
-by_id = {i.id: i for i in ideas}
+
 live = [i for i in ideas if i.status != "archived"]
 
-# --- showcase lineup
-st.markdown("#### 🗓 Showcase lineup: Mon morning · Wed midday · Fri after close")
-lineup = showcase.lineup(14)
-opts = [None] + [i.id for i in live]
-for row in lineup:
-    idea = row["idea"]
-    c = st.columns([1.3, 1.5, 3.2, 1.2])
+# --- showcase lineup (fixed: the Digital Credit Report panels, audited before each post)
+st.markdown("#### 🗓 Showcase lineup: your Digital Credit Report panels")
+st.caption("Mon, Wed and Fri post the panels from digital-credit-report.streamlit.app once the showcase watcher has "
+           "audited them (Control Room → Showcase). Build Lab ideas go out in regular slots, or upgrade those panels.")
+RUN_ICONS = {"waiting": "⏳", "blocked": "⚠️", "ready": "🟢", "posted": "✅", "missed": "🔴"}
+for row in showcase.lineup(14):
+    run = row["run"]
+    c = st.columns([1.3, 2.2, 2.6, 1.6])
     c[0].markdown(f"**{row['date']:%a %b %d}**")
-    c[1].markdown(f"{row['label']} · {row['post_at']}")
-    key = f"lu_{row['date']}_{row['slot']}"
-    c[2].selectbox("Assigned build", opts, index=opts.index(idea.id) if idea and idea.id in opts else 0, key=key,
-                   label_visibility="collapsed", on_change=_assign, disabled=not is_owner(), args=(row["date"].isoformat(), row["slot"], key),
-                   format_func=lambda x: "— pick a build —" if x is None else f"#{x} {by_id[x].title[:60]}")
-    if idea is None:
-        c[3].markdown("⚠️ empty")
-    elif idea.status in showcase.READY:
-        c[3].markdown(f"✅ {idea.status}" + (" · 🔗" if idea.shipped_url else " · no link"))
-    else:
-        c[3].markdown(f"🔨 {idea.status}")
+    c[1].markdown(f"🛠 {row['title']}")
+    c[2].markdown(f"{row['label']} · post {row['post']}")
+    c[3].markdown(f"{RUN_ICONS.get(run.status, '')} {run.status}" if run else "🗓 scheduled")
 
 # --- picks
 st.markdown("#### 🏆 This week's picks")

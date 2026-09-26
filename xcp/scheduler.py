@@ -61,7 +61,8 @@ def plan(force: str | None = None) -> dict:
     return {"jobs": jobs, "requests": len(llm_requests), "work": work, "needs_llm": needs_llm}
 
 
-def run_job(name: str, trigger: str = "schedule") -> dict:
+def run_job(name: str, trigger: str = "schedule", fn=None) -> dict:
+    """Run one job with a Run row (Control Room → Recent runs). `fn` overrides the named dispatch."""
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
@@ -73,7 +74,7 @@ def run_job(name: str, trigger: str = "schedule") -> dict:
         run_id = run.id
     status, stats = "ok", {}
     try:
-        stats = _dispatch(name) or {}
+        stats = (fn() if fn else _dispatch(name)) or {}
     except Exception as e:
         status = "error"
         stats = {"error": str(e)[:500]}
@@ -98,7 +99,6 @@ def _dispatch(name: str) -> dict:
         out = {"posts": analyst.import_own_posts()}
         out["x_reads"] = out["posts"].get("x_reads", 0)
         out["ideas"] = strategist.daily()
-        out["readiness"] = strategist.readiness_alert()
         return out
     if name == "weekly":
         return strategist.weekly()

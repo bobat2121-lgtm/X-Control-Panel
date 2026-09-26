@@ -8,10 +8,9 @@ import subprocess
 import sys
 import time
 
-import httpx
 import streamlit as st
 
-from xcp import config, db
+from xcp import config, db, gh
 from xcp.config import ROOT, env
 from xcp.timeutil import fmt_ago, parse_iso
 
@@ -152,17 +151,11 @@ def market_strip() -> None:
 
 def dispatch_agent() -> str:
     """Kick the cloud agent (GitHub Actions workflow_dispatch). Locally, run it in the background."""
-    token, repo = env("GH_DISPATCH_TOKEN"), env("GITHUB_REPO")
-    if token and repo:
-        try:
-            r = httpx.post(f"https://api.github.com/repos/{repo}/actions/workflows/agent.yml/dispatches",
-                           headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
-                           json={"ref": env("GITHUB_BRANCH", "main")}, timeout=15)
-            if r.status_code in (201, 204):
-                return "Agent started in the cloud. Results appear in about 1–3 minutes."
-            return f"Queued, but the cloud dispatch failed ({r.status_code}). It will run on the next schedule."
-        except httpx.HTTPError as e:
-            return f"Queued, but the cloud dispatch failed ({e}). It will run on the next schedule."
+    if gh.can_dispatch():
+        ok, why = gh.dispatch("agent.yml")
+        if ok:
+            return "Agent started in the cloud. Results appear in about 1–3 minutes."
+        return f"Queued, but the cloud dispatch failed ({why}). It will run on the next schedule."
     if env("LOCAL_AGENT") == "1":
         subprocess.Popen([sys.executable, "-m", "jobs.run", "auto"], cwd=str(ROOT),
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

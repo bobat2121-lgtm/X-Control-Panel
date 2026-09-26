@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["variants"],
+  "properties": {
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "style", "parts"],
+        "properties": {
+          "label": {"type": "string"},
+          "style": {"type": "string", "enum": ["analyst", "punchy", "funny", "thread", "brief", "showcase"]},
+          "parts": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

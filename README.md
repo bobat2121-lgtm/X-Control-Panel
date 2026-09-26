@@ -12,19 +12,33 @@ AI agents draft your X posts (80% Bitcoin and digital credit, 20% AI). You edit,
   │ Nightly: your post metrics ─► Analyst + Strategist ─┘      │         │     Feed · Build Lab · Radar
   └──────────────────────────────────────────────────────────────┼───────┘     Scoreboard · Control Room
                                                                  └──► Discord alerts
-  Showcase gallery (public Streamlit app) ◄── the builds you post Mon / Wed / Fri
+  Showcase watcher (separate workflow) ──► renders + audits your Digital Credit Report panel ──► Feed + Discord
+      reads bobat2121-lgtm/digital-exposure (read-only) and its 8-K feed
 ```
 
 **Schedule (New York time):**
 
 | When | What happens |
 |---|---|
-| ☀️ 7:05 Mon–Fri | Pre-market drafts ready by about 7:20 for your 8:00 post. **Monday is a showcase slot.** |
+| ☀️ 7:05 Mon–Fri | Pre-market drafts ready by about 7:20 for your 8:00 post |
+| 🧾 Mon 7:40–11:30 | **Showcase: The Accretion Ledger.** Waits for both weekly 8-Ks, then renders, audits and drafts it (usually 8:10–8:30). Tuesday after an EDGAR Monday holiday |
 | 🤖 11:20 daily | AI ideas for noon (posting is optional) |
-| 🕜 12:50 Mon–Fri | Midday drafts for 1:30. **Wednesday is a showcase slot.** |
-| 🔔 16:10 Fri | After-close drafts for 4:30. **Showcase slot.** |
-| 🌙 21:30 daily | Pull your post metrics, generate 3 new build ideas, warn if tomorrow's showcase isn't ready |
-| 📅 Sun 17:00 | Weekly memo, 6 bigger ideas, auto-fill empty showcase slots |
+| 🕜 12:50 Mon–Fri | Midday drafts for 1:30 |
+| 🎟 Wed 12:30 | **Showcase: The Coupon Sheet**, audited for the 1:30 post |
+| 🔔 16:10 Fri | After-close drafts for 4:30 |
+| 🔔 Fri 16:05 | **Showcase: The Closing Mark**, once the 4:00 pm closes have settled (about 4:10–4:20) |
+| 🌙 21:30 daily | Pull your post metrics, generate 3 new build ideas |
+| 🧪 Sun/Tue/Thu ~20:13 | Preflight: will tomorrow's panel render cleanly with digital-exposure's current code? Pings only if not |
+| 📅 Sun 17:00 | Weekly memo, 6 bigger ideas, this week's showcase lineup |
+
+**How a showcase is checked.** The watcher runs digital-exposure's own `render_previews.py` (the same code as the page's *Download X image* button), its `audit_panels.py` (independent PASS/WARN/FAIL checks) and, on Monday, `check_monday_publication.py`. It drafts the post only when:
+
+- **Monday:** both weekly 8-Ks are in the feed and validated, and the image shows their balance dates. Every 8-K figure must match the image: BTC bought and held, USD reserve and cash, common and preferred ATM, Strive cash and SATA. The edition must also be complete, with no "retaining last edition" notice.
+- **Wednesday:** the flow ledger includes the latest 8-K week, and strategy.com, Strive and the STRC/SATA quotes are current.
+- **Friday:** it's past 4:00 pm plus 10 minutes, the panel has rolled to this week, and today's closes and the BTC 4 pm mark are in.
+- **Every day:** digital-exposure's audit has 0 FAIL, and no source used by that image fell back to a saved snapshot. The image has no blank values or text overflow, and is 1440 wide and no taller than 3:4.
+
+"Not yet" results retry every few minutes. A real problem (an image figure that disagrees with the 8-K, a FAIL) pings Discord. If digital-exposure's `main` stops rendering, the watcher uses the last commit that rendered cleanly and says so.
 
 ## Try it locally (no keys needed)
 
@@ -94,14 +108,17 @@ For instant rewrites and "Run now", create a [fine-grained token](https://github
 ### 7. First run
 Actions → **agent** → Run workflow → job `premarket`. About 3 minutes later there are drafts in the Feed and a ping in Discord.
 
-### 8. Showcase gallery (public)
-See [showcase_gallery/README.md](showcase_gallery/README.md). It's a separate public repo and app for the Mon/Wed/Fri builds, and each build gets its own link.
+### 8. Showcase (Digital Credit Report)
+Nothing to set up: the **showcase** workflow uses the same `DATABASE_URL` and `DISCORD_WEBHOOK_URL` secrets and reads the public digital-exposure repo. To test it any time: Actions → **showcase** → Run workflow → mode `preflight` (renders all three panels, posts nothing), or Control Room → 🛠 Showcase → 🧪 Preflight. Windows and titles are in Control Room → Settings → Showcase panels.
+
+The old Build Lab gallery (`showcase_gallery/`) is no longer in the showcase rotation. Build launches go out in regular slots.
 
 ---
 
 ## Daily use
 - **Feed:** pick option A/B/C and edit inline (it saves automatically). Use one-click AI rewrites, 🚀 Post on X (opens X's composer), then ✅ Posted with the URL.
-- **Build Lab:** assign builds to the Mon/Wed/Fri lineup and 🧩 copy the build prompt into Claude Code or Codex. Mark an idea ✅ Ready with its link, and the showcase slot writes the launch post.
+- **Showcase days:** the 🟢 Discord message carries the audited image and caption A (facts only, taken from the image). Options B–D with more voice follow a couple of minutes later. Save the image, open X with the caption, and attach it. The Feed card has the same image with a Download button and a 🔄 Re-check.
+- **Build Lab:** 🧩 copy the build prompt into Claude Code or Codex. **Add launch draft** puts a finished build's post in any slot.
 - **Radar:** stories behind the drafts, ✍️ Draft this, reply opportunities, and raw signals.
 - **Scoreboard:** the 80/20 mix and what's working.
 - **Control Room:** watchlist, voice profile, schedule, market inputs (BTC holdings, STRC and SATA rates), calendar, and run logs.

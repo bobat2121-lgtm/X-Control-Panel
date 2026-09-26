@@ -40,16 +40,11 @@ def seed() -> None:
         print(scheduler.run_job(job, trigger="demo"))
     strategist.daily()
 
-    # one idea ready and slotted into the next showcase
-    from xcp import showcase
-
     with db.session() as s:
         idea = s.query(db.BuildIdea).order_by(db.BuildIdea.id).first()
-        nxt = next(iter(showcase.lineup(14)), None)
-        if idea and nxt:
+        if idea:
             idea.status = "ready"
             idea.shipped_url = "https://example.com/strc-par-keeper"
-            idea.showcase_date, idea.showcase_slot = nxt["date"].isoformat(), nxt["slot"]
         for i in range(8):
             pillar = random.choice(["digital_credit", "digital_credit", "bitcoin", "macro", "ai_models"])
             posted = utcnow() - timedelta(days=random.uniform(0, 6))

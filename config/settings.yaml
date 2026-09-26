@@ -42,12 +42,43 @@ slots:
     stories: 2
     variants: 3
 
-# On these slots the main post is a Build Lab creation (a Streamlit panel, GIF, sim...).
-# Regular drafts are still generated as a backup.
-showcase:
-  - {day: mon, slot: premarket}
-  - {day: wed, slot: midday}
-  - {day: fri, slot: friday_close}
+# Showcase posts: the X images from your Digital Credit Report (digital-exposure repo).
+# The showcase workflow renders each panel with the same code as the page's "Download X image"
+# button, audits it, and only then drafts the post. Regular drafts stay as backups.
+# start/deadline = watch window (ET). Monday moves to Tuesday after an EDGAR Monday holiday.
+digital_exposure:
+  repo: bobat2121-lgtm/digital-exposure
+  branch: main
+  app_url: https://digital-credit-report.streamlit.app
+  feed_url: https://capital-report.alatimore06370.workers.dev/api/filings
+  poll_seconds: 120          # cheap readiness check (8-K feed / clock)
+  render_every_seconds: 300  # full render + audit at most this often
+  friday_settle_minutes: 10  # let the 4:00 pm closes settle before accepting Friday data
+  panels:
+    monday:
+      title: "The Accretion Ledger"
+      day: mon
+      slot: premarket
+      start: "07:40"
+      nudge: "09:00"      # one "still waiting" ping if not ready by then
+      deadline: "11:30"
+      post: "as soon as it's ready (usually 8:10-8:30)"
+    wednesday:
+      title: "The Coupon Sheet"
+      day: wed
+      slot: midday
+      start: "12:30"
+      nudge: "13:15"
+      deadline: "15:00"
+      post: "13:30"
+    friday:
+      title: "The Closing Mark"
+      day: fri
+      slot: friday_close
+      start: "16:05"
+      nudge: "16:25"
+      deadline: "18:30"
+      post: "16:30"
 
 jobs:
   nightly: {run_at: "21:30", days: [mon, tue, wed, thu, fri, sat, sun]}

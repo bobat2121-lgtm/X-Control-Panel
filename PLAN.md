@@ -5,7 +5,7 @@ A Streamlit control panel, run mostly by AI agents, that surfaces ready-to-post 
 ## Decisions (v0.2)
 - **LLM:** no Anthropic API. The agents run **Codex CLI signed in with your ChatGPT account** (your plan's usage, not API billing). ChatGPT's own Scheduled Tasks can't push results into an outside app unattended: writes need confirmation, and output stays in ChatGPT.
 - **Cloud:** GitHub Actions runs the agents on cron (gated on New York time). Postgres (Neon/Supabase) stores everything. The panel is a private Streamlit Community Cloud app.
-- **Showcase slots:** Monday pre-market, Wednesday midday and a new **Friday after-close (4:30)** slot post a Build Lab creation, hosted in a separate **public** Streamlit gallery. Regular drafts are still generated as a backup.
+- **Showcase slots (v0.3, 2026-09-26):** Monday pre-market, Wednesday midday and Friday after-close post the owner's **Digital Credit Report** panels (digital-exposure repo): The Accretion Ledger, The Coupon Sheet and The Closing Mark. A separate `showcase` workflow renders each one with that repo's own code and audits it. It drafts the post only after the new data is in: Monday after both 8-Ks are ingested and match the image, Friday after the 4 pm close. Regular drafts are still generated as a backup. (Replaces the Build Lab gallery.)
 - **X Premium:** long posts are allowed. The editor flags hooks that land after 280 characters.
 - **Alerts:** Discord webhook.
 - **Tabs:** Feed, Build Lab, Radar, Scoreboard, Control Room.

@@ -1,0 +1,112 @@
+name: showcase
+
+# Mon / Wed / Fri showcase: renders your Digital Credit Report panel with digital-exposure's own code
+# (the same functions as the page's "Download X image" button), audits it, and drafts the post only
+# once the new data is in. Read-only against digital-exposure: nothing is ever pushed there.
+#
+# It has its own queue so a long Monday wait never blocks the `agent` workflow. GitHub cron can start
+# late or skip a run under load, so each window has several start times (EDT and EST hours listed);
+# extra starts exit in seconds once the panel is ready.
+on:
+  schedule:
+    - cron: "41 11,12 * * 1,2"   # 🧾 Accretion Ledger 07:41 ET (Tue only after an EDGAR Monday holiday)
+    - cron: "23 13,14 * * 1,2"   #    backup starts 08:23-10:23 ET
+    - cron: "11 15 * * 1,2"      #    last backup 10:11-11:11 ET
+    - cron: "31 16,17 * * 3"     # 🎟 Coupon Sheet 12:31 ET
+    - cron: "3 17,18 * * 3"      #    backup 13:03 ET
+    - cron: "3 20,21 * * 5"      # 🔔 Closing Mark 16:03 ET (waits for the close to settle)
+    - cron: "37 20,21 * * 5"     #    backup 16:37 ET
+    - cron: "13 0,1 * * 1,3,5"   # 🧪 preflight Sun/Tue/Thu ~20:13 ET: will tomorrow's panel render cleanly?
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "once = render + audit now · watch = wait through today's window · preflight = test all three"
+        required: false
+        default: "once"
+      panel:
+        description: "monday | wednesday | friday (blank = today's)"
+        required: false
+        default: ""
+      quiet:
+        description: "true = no Discord alerts"
+        required: false
+        default: "false"
+
+concurrency:
+  group: showcase
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write   # hand the ready panel to the agent workflow for captions
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      PANEL_URL: ${{ vars.PANEL_URL }}
+      GH_DISPATCH_TOKEN: ${{ github.token }}
+      GITHUB_REPO: ${{ github.repository }}
+      MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event.schedule == '13 0,1 * * 1,3,5' && 'preflight' || 'watch') }}
+      PANEL: ${{ inputs.panel }}
+      QUIET: ${{ inputs.quiet == 'true' && '--quiet' || '' }}
+    steps:
+      - name: Secrets configured?
+        id: cfg
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice::DATABASE_URL secret not set yet. Skipping."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ok == 'true'
+
+      - uses: actions/setup-python@v5
+        id: py
+        if: steps.cfg.outputs.ok == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        if: steps.cfg.outputs.ok == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Anything to do?
+        id: plan
+        if: steps.cfg.outputs.ok == 'true'
+        run: python -m jobs.run showcase --plan --mode "$MODE" --panel "$PANEL"
+
+      - name: Check out digital-exposure (read-only)
+        if: steps.plan.outputs.go == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: bobat2121-lgtm/digital-exposure
+          path: de
+          fetch-depth: 0              # full history: lets the watcher fall back to the last commit that rendered cleanly
+          persist-credentials: false  # no write access to that repo, ever
+
+      - name: Cache digital-exposure's environment
+        if: steps.plan.outputs.go == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .de-venv
+          key: de-venv-${{ runner.os }}-${{ steps.py.outputs.python-version }}-${{ hashFiles('de/requirements.txt') }}
+
+      - name: Install digital-exposure's requirements (own venv)
+        if: steps.plan.outputs.go == 'true'
+        run: |
+          if [ ! -x .de-venv/bin/python ]; then
+            python -m venv .de-venv
+            .de-venv/bin/pip install -q -r de/requirements.txt
+          fi
+
+      - name: Showcase
+        if: steps.plan.outputs.go == 'true'
+        run: python -m jobs.run showcase --mode "$MODE" --panel "$PANEL" --de-dir de --de-python .de-venv/bin/python $QUIET

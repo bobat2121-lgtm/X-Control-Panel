@@ -23,7 +23,7 @@ REWRITE_PRESETS = {
     "single": "Condense into one single post (not a thread).",
 }
 LLM_KINDS = {"rewrite", "draft_from_url", "draft_from_text", "draft_from_story", "regenerate", "idea_from_story",
-             "idea_remix", "ideas_generate", "style_sparks"}
+             "idea_remix", "ideas_generate", "style_sparks", "showcase_captions"}
 
 
 def pending(kind: str | None = None) -> list[db.Request]:
@@ -292,6 +292,58 @@ def h_ideas_generate(p: dict) -> dict:
     return {"idea_ids": strategist.save_ideas(out.get("ideas", []), note="Generated from the panel")}
 
 
+PANEL_NOTES = {
+    "monday": "It is the Monday Accretion Ledger: what Strategy and Strive bought with the week's capital (from "
+              "their weekly 8-Ks) and what it did per share.",
+    "wednesday": "It is the Wednesday Coupon Sheet: STRC and SATA yields and spreads over the 3-month bill, the "
+                 "rest of the preferred ladder, and the coupon calendar.",
+    "friday": "It is the Friday Closing Mark: BTC at the 4 pm mark, MSTR and ASST price/NAV, macro, and a "
+              "rule-based cycle checklist.",
+}
+
+
+def h_showcase_captions(p: dict) -> dict:
+    """Voicier caption options (B, C, D) for an audited Digital Credit Report image. A stays the fact-only one."""
+    from xcp import notify, showcase
+    from xcp.showcase_gate import values_of
+    from xcp.sources import digital_exposure as de
+
+    with db.session() as s:
+        d = s.get(db.Draft, int(p["draft_id"]))
+        run = s.get(db.ShowcaseRun, int(p["run_id"])) if p.get("run_id") else showcase.run_for_draft(s, d.id)
+    values = values_of({"panels": {run.panel: run.audit}}, run.panel)
+    url = de.report_url(run.panel)
+    whats_new = (d.inspiration or [{}])[0].get("text", "") or "(see figures)"
+    prompt = llm.render_prompt(
+        "showcase", handle=context.handle(), voice=config.get("voice"), guidelines=config.get("guidelines"),
+        style=context.style_block("btc", seed=f"showcase-{run.id}"), title=run.title,
+        panel_note=PANEL_NOTES.get(run.panel, ""), values="\n".join(f"- {k}: {v}" for k, v in values.items()),
+        whats_new=whats_new, url=url, n="3")
+    out = llm.run_json(prompt, "showcase", mock=lambda: {"variants": [
+        {"label": "B", "style": "brief", "parts": [f"[mock] {run.title} is out. {url}"]}]})
+    known = [f"{k} {v}" for k, v in values.items()]
+    flags, made = [], []
+    with db.session() as s:
+        for i, v in enumerate(out.get("variants", [])[:3]):
+            label = "BCD"[i]
+            parts = [x for x in v.get("parts", []) if x.strip()]
+            if not parts:
+                continue
+            flags += [f"{label}: {f}" for f in editor.check_variant(parts, {}, known, v.get("style", ""))]
+            db.add_variant_version(s, d.id, label, parts, v.get("style", "showcase"), "ai:showcase")
+            made.append((label, xtext.join_parts(parts)))
+        row = s.get(db.Draft, d.id)
+        row.editor_flags = list(row.editor_flags or []) + flags
+        s.commit()
+    if made:
+        fields = []
+        for label, text in made:
+            link = xtext.intent_post(text.split(xtext.THREAD_SEP)[0])
+            fields.append((f"Option {label}", text[:900] + (f"\n[🚀 Open X]({link})" if len(link) < 1000 else "")))
+        notify.discord(f"✍️ Captions for {run.title}", "Attach the image from the 🟢 message (or the Feed).", fields)
+    return {"draft_id": d.id, "variants": len(made), "flags": len(flags)}
+
+
 HANDLERS = {
     "style_sparks": h_style_sparks,
     "ideas_generate": h_ideas_generate,
@@ -301,4 +353,5 @@ HANDLERS = {
     "regenerate": h_regenerate,
     "idea_from_story": h_idea_from_story,
     "idea_remix": h_idea_remix,
+    "showcase_captions": h_showcase_captions,
 }

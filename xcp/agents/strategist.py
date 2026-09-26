@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select
 
@@ -41,10 +41,10 @@ def _existing_block() -> str:
 
 
 def _lineup_block() -> str:
-    rows = showcase.lineup(14)
-    return "\n".join(f"{r['date']:%a %Y-%m-%d} {r['slot']}: "
-                     f"{(r['idea'].title + ' [' + r['idea'].status + ']') if r['idea'] else 'EMPTY'}"
-                     for r in rows) or "(no showcase slots)"
+    head = ("The Mon/Wed/Fri showcase posts are fixed: the owner's Digital Credit Report panels (Mon The Accretion "
+            "Ledger, Wed The Coupon Sheet, Fri The Closing Mark). Build Lab ideas are extra creations for regular "
+            "slots, or upgrades to those three panels.")
+    return "\n".join([head] + [f"{r['date']:%a %Y-%m-%d}: {r['title']}" for r in showcase.lineup(14)])
 
 
 def _mock_ideas(n: int, weekly: bool) -> dict:
@@ -59,23 +59,16 @@ def _mock_ideas(n: int, weekly: bool) -> dict:
             "launch_post": "STRC's rate reset works like a thermostat. Here's what that looks like:",
             "followups": ["mock followup 1", "mock followup 2"],
             "build_prompt": "Build a GIF simulation of STRC price mean-reverting to $100 par...", "series": ""})
-    lineup = []
-    if weekly:
-        for r in showcase.lineup(14):
-            if not r["idea"] and ideas:
-                lineup.append({"date": r["date"].isoformat(), "slot": r["slot"], "idea_title": ideas[0]["title"]})
-                break
-    return {"ideas": ideas, "memo": "[mock] Weekly memo." if weekly else "", "lineup": lineup}
+    return {"ideas": ideas, "memo": "[mock] Weekly memo." if weekly else "", "lineup": []}
 
 
 def generate(n: int = 3, weekly: bool = False, focus: str = "") -> dict:
     snap_text, snap_time, _ = context.snapshot_block()
     if weekly:
         mode = ("WEEKLY deep pass. Review the week: what performed, what didn't, which pillars are under target. "
-                "Propose ideas for the next two weeks of showcase slots.")
+                "Propose ideas worth building next, including upgrades to the three Digital Credit Report panels.")
         task = (f"Return {n} new ideas. memo: a short weekly review for the owner (what worked, what to try, the "
-                f"mix vs 80/20, 5-8 bullets). lineup: for each EMPTY showcase slot in the next 2 weeks, suggest "
-                f"an idea title, either from your new ideas or an existing inbox/shortlist idea.")
+                f"mix vs 80/20, 5-8 bullets). lineup: an empty array (the showcase slots are fixed).")
     else:
         mode = "DAILY light pass. React to today's stories and yesterday's performance."
         task = f"Return {n} new ideas. memo: an empty string. lineup: an empty array."
@@ -116,27 +109,6 @@ def _clamp(v) -> int:
         return 5
 
 
-def apply_lineup(lineup: list[dict]) -> list[str]:
-    applied = []
-    with db.session() as s:
-        for row in lineup:
-            try:
-                d = date.fromisoformat(row["date"])
-            except ValueError:
-                continue
-            if showcase.assigned_idea(s, d.isoformat(), row["slot"]):
-                continue
-            idea = s.scalars(select(db.BuildIdea).where(db.BuildIdea.title == row["idea_title"],
-                                                        db.BuildIdea.showcase_date.is_(None))).first()
-            if idea:
-                idea.showcase_date, idea.showcase_slot = d.isoformat(), row["slot"]
-                idea.status = "shortlist" if idea.status == "inbox" else idea.status
-                idea.notes = (idea.notes + "\nAuto-slotted by the weekly strategist.").strip()
-                applied.append(f"{d:%a %b %d} {row['slot']}: {idea.title}")
-        s.commit()
-    return applied
-
-
 def daily() -> dict:
     out = generate(n=3)
     ids = save_ideas(out.get("ideas", []))
@@ -148,30 +120,13 @@ def weekly() -> dict:
     ids = save_ideas(out.get("ideas", []), note="From the weekly review.")
     memo = out.get("memo", "")
     db.kv_set("weekly_memo", {"date": today_ny().isoformat(), "text": memo})
-    applied = apply_lineup(out.get("lineup", []))
-    lineup_text = "\n".join(
-        f"{r['date']:%a %b %d} {r['label']}: " + (f"{r['idea'].title} [{r['idea'].status}]" if r["idea"] else "EMPTY")
-        for r in showcase.lineup(7))
-    notify.discord("📅 Weekly review + showcase lineup", memo[:3000],
-                   [("This week's showcase lineup", lineup_text or "—"),
-                    ("New ideas", f"{len(ids)} added to Build Lab"),
-                    ("Auto-slotted", "\n".join(applied) or "—")])
-    return {"ideas": len(ids), "lineup_applied": len(applied)}
-
-
-def readiness_alert() -> str | None:
-    """Warn the night before if tomorrow's showcase build isn't ready."""
-    tomorrow = today_ny() + timedelta(days=1)
-    msgs = []
-    with db.session() as s:
-        for slot in showcase.showcase_slots(tomorrow):
-            idea = showcase.assigned_idea(s, tomorrow.isoformat(), slot) or showcase.pick_for_slot(s, tomorrow, slot)
-            if idea is None:
-                msgs.append(f"{slot}: nothing assigned or ready")
-            elif idea.status not in showcase.READY:
-                msgs.append(f"{slot}: '{idea.title}' is still [{idea.status}]")
-    if msgs:
-        text = "\n".join(msgs)
-        notify.discord(f"⚠️ Tomorrow's showcase ({tomorrow:%a %b %d}) needs attention", text, color=0xE74C3C)
-        return text
-    return None
+    lineup_text = "\n".join(f"{r['date']:%a %b %d} {r['label']}: {r['title']} (post {r['post']})"
+                            for r in showcase.lineup(7))
+    fields = [("This week's showcase lineup", lineup_text or "—"), ("New ideas", f"{len(ids)} added to Build Lab")]
+    pre = db.kv_get("showcase:preflight") or {}
+    if pre.get("at"):
+        fields.append(("Last preflight", f"digital-exposure {str(pre.get('commit', ''))[:7]}: " + " · ".join(
+            f"{p} {'✅' if x.get('clean') else '⚠️'}" for p, x in (pre.get("panels") or {}).items())
+            + (f" · error: {pre['error']}" if pre.get("error") else "")))
+    notify.discord("📅 Weekly review + showcase lineup", memo[:3000], fields)
+    return {"ideas": len(ids)}

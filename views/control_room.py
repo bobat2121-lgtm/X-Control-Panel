@@ -8,10 +8,10 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel.common import enqueue, is_owner
-from xcp import config, db, notify
+from xcp import config, db, gh, notify, showcase
 from xcp.agents.collect import x_reads_this_month, x_reads_today
 from xcp.config import env
-from xcp.timeutil import fmt_ny, today_ny
+from xcp.timeutil import fmt_ny, parse_iso, today_ny
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 CODEX_MODELS = {  # from OpenAI's Codex model list (Sept 2026)
@@ -28,8 +28,9 @@ if not is_owner():
     st.stop()
 
 settings = config.settings()
-t_agents, t_settings, t_watch, t_voice, t_style, t_market, t_cal = st.tabs(
-    ["🛰 Agents", "⚙️ Settings", "👀 Watchlist", "🗣 Voice & rules", "📚 Style library", "💹 Market inputs", "📅 Calendar"])
+t_agents, t_show, t_settings, t_watch, t_voice, t_style, t_market, t_cal = st.tabs(
+    ["🛰 Agents", "🛠 Showcase", "⚙️ Settings", "👀 Watchlist", "🗣 Voice & rules", "📚 Style library",
+     "💹 Market inputs", "📅 Calendar"])
 
 # ------------------------------------------------------------------ agents
 with t_agents:
@@ -84,6 +85,93 @@ with t_agents:
         st.toast("Sent" if ok else "Not sent: DISCORD_WEBHOOK_URL is missing in this app's secrets",
                  icon="🔔" if ok else "⚠️")
 
+# ------------------------------------------------------------------ showcase
+RUN_ICONS = {"waiting": "⏳", "blocked": "⚠️", "ready": "🟢", "posted": "✅", "missed": "🔴"}
+CHECK_ICONS = {"PASS": "✅", "WARN": "⚠️", "WAIT": "⏳", "FAIL": "❌"}
+
+
+def _sc_dispatch(mode: str, panel: str) -> None:
+    ok, why = gh.dispatch("showcase.yml", {"mode": mode, "panel": panel})
+    st.toast(f"Showcase {mode} started in the cloud ({panel or 'today'})." if ok else f"Couldn't start it: {why}",
+             icon="🛰️" if ok else "⚠️")
+
+
+def _use_anyway(run_id: int) -> None:
+    from xcp.agents import showcase_watch
+
+    with db.session() as s:
+        r = s.get(db.ShowcaseRun, run_id)
+        r.warnings = list(r.warnings or []) + [{"id": "override", "status": "WARN",
+                                                "detail": "posted on your override: " + "; ".join(
+                                                    b.get("detail", "") for b in (r.blockers or []))[:300]}]
+        s.commit()
+    showcase_watch.finalize(run_id, note="Owner override.", quiet=True)
+    st.toast("Showcase draft created in the Feed from the last render", icon="🛠")
+
+
+with t_show:
+    pre = db.kv_get("showcase:preflight") or {}
+    last_good = db.kv_get("showcase:last_good_commit") or ""
+    c = st.columns(3)
+    c[0].markdown("**Last preflight**  \n" + (
+        f"<span class='xcp-muted'>{fmt_ny(parse_iso(pre['at']))} · code {str(pre.get('commit', ''))[:7]} · "
+        + " · ".join(f"{p} {'✅' if x.get('clean') else '⚠️'}" for p, x in (pre.get("panels") or {}).items())
+        + (f" · ❌ {pre['error'][:120]}" if pre.get("error") else "") + "</span>"
+        if pre.get("at") else "<span class='xcp-muted'>none yet (runs Sun/Tue/Thu ~8:13 PM ET)</span>"),
+        unsafe_allow_html=True)
+    c[1].markdown(f"**Last clean digital-exposure code**  \n<span class='xcp-muted'>"
+                  f"{last_good[:7] or '—'} (fallback if main breaks)</span>", unsafe_allow_html=True)
+    c[2].markdown(f"**Cloud buttons**  \n<span class='xcp-muted'>"
+                  f"{'ready' if gh.can_dispatch() else 'set GH_DISPATCH_TOKEN in this app’s secrets'}</span>",
+                  unsafe_allow_html=True)
+
+    b = st.columns([1.3, 1, 1, 1])
+    sc_opts = [""] + list((settings.get("digital_exposure", {}).get("panels") or {}))
+    sc_pick = b[0].selectbox("Panel", sc_opts, format_func=lambda p: p or "today's panel", label_visibility="collapsed")
+    b[1].button("🔄 Re-check now", on_click=_sc_dispatch, args=("once", sc_pick), width="stretch",
+                help="One render + audit now; drafts the post if it passes")
+    b[2].button("👀 Watch today's window", on_click=_sc_dispatch, args=("watch", sc_pick), width="stretch",
+                help="Starts the watcher if a scheduled start was missed")
+    b[3].button("🧪 Preflight all three", on_click=_sc_dispatch, args=("preflight", ""), width="stretch",
+                help="Renders all three panels and reports anything broken. Posts nothing")
+
+    st.markdown("#### Lineup")
+    st.dataframe([{"date": f"{r['date']:%a %b %d}", "panel": r["title"], "slot": r["label"], "post": r["post"],
+                   "window (ET)": r["window"],
+                   "status": (RUN_ICONS.get(r["run"].status, "") + " " + r["run"].status) if r["run"] else "scheduled"}
+                  for r in showcase.lineup(14)], hide_index=True, width="stretch")
+
+    st.markdown("#### Runs")
+    with db.session() as s:
+        sc_runs = list(s.scalars(select(db.ShowcaseRun).order_by(db.ShowcaseRun.run_date.desc(),
+                                                                 db.ShowcaseRun.id.desc()).limit(12)).all())
+    if not sc_runs:
+        st.caption("No showcase runs yet. The first one is the next Mon/Wed/Fri window.")
+    for r in sc_runs:
+        n = r.audit_summary or {}
+        with st.expander(f"{RUN_ICONS.get(r.status, '•')} {r.run_date} · {r.title} · {r.status} · {r.renders} render(s)"
+                         f" · digital-exposure {n.get('PASS', 0)}/{n.get('WARN', 0)}/{n.get('FAIL', 0)}"):
+            cc = st.columns([3, 2])
+            with cc[0]:
+                st.dataframe([{"": CHECK_ICONS.get(x.get("status"), ""), "check": x.get("id"), "detail": x.get("detail")}
+                              for x in r.checks or []], hide_index=True, width="stretch")
+                if r.filings:
+                    st.caption("8-Ks: " + " · ".join(f"{f.get('ticker')} [{f.get('accession')}]({f.get('url')}) "
+                                                     f"balance {f.get('balance_date')}" for f in r.filings.values()))
+                st.caption(f"code {r.de_commit[:7]}{' (last-good fallback)' if r.used_fallback else ''} · "
+                           f"ready {fmt_ny(r.ready_at) if r.ready_at else '—'} · updated {fmt_ny(r.updated_at)}")
+                if r.status in ("waiting", "blocked", "missed") and r.png:
+                    st.button("Use this image anyway", key=f"sc_use_{r.id}", on_click=_use_anyway, args=(r.id,),
+                              help="Creates the showcase draft from the last render, with the open issues noted")
+            with cc[1]:
+                if r.png:
+                    st.image(r.png, width="stretch")
+            with st.popover("digital-exposure checks & log"):
+                st.dataframe([{"": CHECK_ICONS.get(x.get("status"), ""), "panel": x.get("panel"), "check": x.get("label"),
+                               "value": str(x.get("value")), "detail": x.get("detail")} for x in r.audit_checks or []],
+                             hide_index=True, width="stretch")
+                st.code(r.log or "(no log)", language=None)
+
 # ------------------------------------------------------------------ settings
 with t_settings:
     new = copy.deepcopy(settings)
@@ -120,12 +208,21 @@ with t_settings:
     st.caption("GitHub's cron triggers are set in .github/workflows/agent.yml. If you move a run_at by more "
                "than about an hour, update the cron there too.")
 
-    st.markdown("**Showcase slots** (a Build Lab creation is the main post)")
-    sc = st.data_editor(pd.DataFrame(settings.get("showcase", [])), hide_index=True, num_rows="dynamic",
-                        width="stretch", key="sc_ed",
+    st.markdown("**Showcase panels** (Digital Credit Report). `start`–`deadline` is the watch window (ET); "
+                "`nudge` sends one 'still waiting' ping.")
+    de_cfg = settings.get("digital_exposure", {})
+    sc_rows = [{"panel": k, "title": v.get("title", k), "day": v.get("day", ""), "slot": v.get("slot", ""),
+                "start": v.get("start", ""), "nudge": v.get("nudge", ""), "deadline": v.get("deadline", ""),
+                "post": v.get("post", "")} for k, v in (de_cfg.get("panels") or {}).items()]
+    sc = st.data_editor(pd.DataFrame(sc_rows), hide_index=True, width="stretch", key="sc_ed", disabled=["panel"],
                         column_config={"day": st.column_config.SelectboxColumn("day", options=DAYS),
                                        "slot": st.column_config.SelectboxColumn("slot", options=list(settings["slots"]))})
-    new["showcase"] = [{"day": r["day"], "slot": r["slot"]} for _, r in sc.iterrows() if r.get("day") and r.get("slot")]
+    new.setdefault("digital_exposure", copy.deepcopy(de_cfg)).setdefault("panels", {})
+    for _, r in sc.iterrows():
+        new["digital_exposure"]["panels"][r["panel"]] = {k: str(r[k]) for k in
+                                                         ("title", "day", "slot", "start", "nudge", "deadline", "post")}
+    st.caption("The showcase workflow's start times are in .github/workflows/showcase.yml. Moving a window by more "
+               "than about an hour needs a cron change there too.")
 
     st.markdown("**Limits**")
     c = st.columns(4)

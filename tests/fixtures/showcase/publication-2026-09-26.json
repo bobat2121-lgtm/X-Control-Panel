@@ -1,0 +1,42 @@
+{
+  "status": "complete",
+  "version": "a6924444088e7f02",
+  "subtitle": "Balance dates: Strategy Sep 20 \u00b7 Strive Sep 18",
+  "price_fetched_at": "2026-09-26T16:33:36.180765+00:00",
+  "companies": {
+    "MSTR": {
+      "balance_date": "2026-09-20",
+      "prior_balance_date": "2026-09-13",
+      "required_period_baselines": {
+        "QTD": "2026-06-30",
+        "YTD": "2025-12-31"
+      },
+      "current": {
+        "btc_holdings": 846000,
+        "effective_common_shares": 420507000,
+        "cash": null,
+        "marketable_securities": null,
+        "debt_principal": 6753703000,
+        "preferred_claims": 14457452388.594444,
+        "combined_liquid_assets": 6090000000
+      }
+    },
+    "ASST": {
+      "balance_date": "2026-09-18",
+      "prior_balance_date": "2026-09-11",
+      "required_period_baselines": {
+        "QTD": "2026-06-30",
+        "YTD": "2025-12-31"
+      },
+      "current": {
+        "btc_holdings": 26355,
+        "effective_common_shares": 97002649,
+        "cash": 229600000,
+        "marketable_securities": 49762700.0,
+        "debt_principal": 0,
+        "preferred_claims": 1118416000.0,
+        "combined_liquid_assets": null
+      }
+    }
+  }
+}

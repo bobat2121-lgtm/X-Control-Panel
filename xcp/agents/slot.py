@@ -24,7 +24,7 @@ SLOT_BRIEFS = {
 }
 
 
-def _mock_slot(items: list[db.Item], flat: dict, n_stories: int, n_variants: int, idea) -> dict:
+def _mock_slot(items: list[db.Item], flat: dict, n_stories: int, n_variants: int) -> dict:
     by_pillar: dict[str, list[db.Item]] = {}
     for it in items:
         by_pillar.setdefault(it.pillar, []).append(it)
@@ -47,10 +47,7 @@ def _mock_slot(items: list[db.Item], flat: dict, n_stories: int, n_variants: int
                        "inspiration_item_ids": [x.id for x in its[:3]], "chart_hint": "btc_7d"})
     replies = [{"item_id": it.id, "reply": "[mock] Sharp point. The coverage math is the part people miss.",
                 "why": "mock"} for it in items if it.kind == "x_post"][:2]
-    sv = []
-    if idea is not None:
-        sv = [{"label": "A", "style": "showcase", "parts": [showcase.default_showcase_text(idea)]}]
-    return {"stories": stories, "drafts": drafts, "replies": replies, "showcase_variants": sv}
+    return {"stories": stories, "drafts": drafts, "replies": replies, "showcase_variants": []}
 
 
 def run_slot(slot: str) -> dict:
@@ -69,34 +66,17 @@ def run_slot(slot: str) -> dict:
     items = collect.select_items(lane, limit=int(limits.get("items_to_llm", 120)))
     item_map = {it.id: it for it in items}
 
-    # --- showcase?
-    idea = None
+    # --- showcase? The Digital Credit Report panel is audited and drafted by the showcase watcher
+    # (.github/workflows/showcase.yml); this run only writes the backup drafts.
+    sc_panel = showcase.panel_for(d) if showcase.is_showcase(slot, d) else None
     showcase_note = ""
-    with db.session() as s:
-        if showcase.is_showcase(slot, d):
-            if showcase.existing_showcase_draft(s, date_str, slot):
-                showcase_note = "showcase draft already exists"
-            else:
-                idea = showcase.pick_for_slot(s, d, slot)
-                showcase_note = f"showcase: {idea.title}" if idea else "NO BUILD READY for this showcase slot"
-    is_sc = idea is not None
-    # A ready showcase is the main post, so only one backup story is needed.
-    has_showcase = is_sc or showcase_note == "showcase draft already exists"
-    n_stories = 1 if has_showcase else int(spec.get("stories", 3))
+    if sc_panel:
+        with db.session() as s:
+            sc_run = showcase.run_for(s, date_str, sc_panel)
+        showcase_note = f"showcase: {showcase.title(sc_panel)} ({sc_run.status if sc_run else 'watcher not started yet'})"
+    n_stories = min(int(spec.get("stories", 3)), 2) if sc_panel else int(spec.get("stories", 3))
     n_variants = int(spec.get("variants", 3))
-
-    if is_sc:
-        sc_block = "## Showcase: this slot's main post is a Build Lab creation\n" + context.compact({
-            "title": idea.title, "hook": idea.hook, "format": idea.format, "concept": idea.concept[:1200],
-            "link": idea.shipped_url, "media": idea.media_url, "launch_post_draft": idea.launch_post,
-            "pillar": idea.pillar})
-        link = idea.shipped_url or "(link added by the owner)"
-        sc_task = (f"Write 3 showcase variants (style 'showcase', or 'thread' for one of them) announcing this "
-                   f"creation. Put the hook first, then what it shows and why it matters today; tie it to the "
-                   f"snapshot where that's natural. End single posts with the link {link}. Make one variant a "
-                   f"3-4 part thread.")
-    else:
-        sc_block, sc_task = "", "No showcase this slot: return an empty showcase_variants array."
+    sc_block, sc_task = "", "No showcase this slot: return an empty showcase_variants array."
 
     prompt = llm.render_prompt(
         "slot", handle=context.handle(), slot_label=spec.get("label", slot), post_at=spec.get("post_at", ""),
@@ -107,7 +87,7 @@ def run_slot(slot: str) -> dict:
         items=context.items_block(items, int(limits.get("item_text_chars", 600))),
         showcase_block=sc_block, showcase_task=sc_task, max_stories=str(max(n_stories + 2, 5)),
         n_stories=str(n_stories), n_variants=str(n_variants))
-    out = llm.run_json(prompt, "slot", mock=lambda: _mock_slot(items, flat, n_stories, n_variants, idea))
+    out = llm.run_json(prompt, "slot", mock=lambda: _mock_slot(items, flat, n_stories, n_variants))
 
     # --- persist
     created = []
@@ -160,17 +140,11 @@ def run_slot(slot: str) -> dict:
             s.flush()
             db.add_variant_version(s, draft.id, "A", [rp["reply"]], "reply", "ai")
 
-        sc_draft = None
-        if is_sc and out.get("showcase_variants"):
-            idea_row = s.get(db.BuildIdea, idea.id)
-            sc_draft = showcase.create_showcase_draft(s, idea_row, slot, date_str, out["showcase_variants"])
-        elif is_sc:
-            sc_draft = showcase.create_showcase_draft(s, s.get(db.BuildIdea, idea.id), slot, date_str)
         s.commit()
 
     stats.update({"stories": len(out.get("stories", [])), "drafts": len(created),
                   "replies": len(out.get("replies", [])), "showcase": showcase_note})
-    _alert(slot, spec, created, sc_draft, showcase_note, stats)
+    _alert(slot, spec, created, sc_panel, stats)
     return stats
 
 
@@ -179,20 +153,22 @@ def _insp(it: db.Item) -> dict:
             "metrics": it.metrics or {}, "followers": it.author_followers}
 
 
-def _alert(slot: str, spec: dict, drafts: list[db.Draft], sc_draft, showcase_note: str, stats: dict) -> None:
+def _alert(slot: str, spec: dict, drafts: list[db.Draft], sc_panel: str | None, stats: dict) -> None:
     title = f"{spec.get('label', slot)} drafts ready. Post at {spec.get('post_at', '')} ET"
     desc_lines = []
     top_text = ""
     with db.session() as s:
-        lead = sc_draft or (sorted(drafts, key=lambda x: -x.score)[0] if drafts else None)
+        lead = sorted(drafts, key=lambda x: -x.score)[0] if drafts else None
         if lead:
             vs = db.current_variants(s, lead.id)
             if vs:
                 top_text = xtext.join_parts(vs[0].parts)
-    if sc_draft:
-        desc_lines.append("🛠 **Showcase slot.** Your Build Lab creation is the main post.")
-    elif "NO BUILD" in showcase_note:
-        desc_lines.append("⚠️ **Showcase slot, but no build is marked ready.** Regular drafts are below.")
+    if sc_panel:
+        sc_spec = showcase.panels().get(sc_panel, {})
+        wait = " once both 8-Ks are in" if sc_panel == "monday" else ""
+        desc_lines.append(f"🛠 **Showcase slot: {sc_spec.get('title', sc_panel)}.** It's audited and drafted "
+                          f"separately{wait}; a 🟢 ping with the image follows (post {sc_spec.get('post', '')}). "
+                          f"These drafts are backups.")
     if top_text:
         desc_lines.append(f"**Top pick:**\n{top_text[:900]}")
         first = top_text.split(xtext.THREAD_SEP)[0]

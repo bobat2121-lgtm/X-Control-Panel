@@ -94,4 +94,6 @@ jobs:
       - name: Keep the schedule enabled
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/agent.yml/enable"
+        run: |
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/agent.yml/enable"
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/showcase.yml/enable"

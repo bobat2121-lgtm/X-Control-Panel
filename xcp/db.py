@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     Integer,
+    LargeBinary,
     String,
     Text,
     create_engine,
@@ -234,6 +235,37 @@ class StyleExample(Base):
     metrics: Mapped[dict] = mapped_column(JSON, default=dict)
     strength: Mapped[int] = mapped_column(Integer, default=7)  # 1-10
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+
+class ShowcaseRun(Base):
+    """One Digital Credit Report panel for one showcase day: every audit attempt, then the image you post."""
+    __tablename__ = "showcase_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_date: Mapped[str] = mapped_column(String(10), index=True)  # the New York showcase date
+    panel: Mapped[str] = mapped_column(String(20), index=True)  # monday | wednesday | friday
+    slot: Mapped[str] = mapped_column(String(30), default="")
+    title: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="waiting", index=True)
+    # waiting | ready | blocked | missed | posted
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)  # readiness checks
+    renders: Mapped[int] = mapped_column(Integer, default=0)  # full render + audit passes
+    de_commit: Mapped[str] = mapped_column(String(40), default="")  # digital-exposure code that drew it
+    used_fallback: Mapped[bool] = mapped_column(Boolean, default=False)  # last-good code, main was broken
+    checks: Mapped[list] = mapped_column(JSON, default=list)  # our gate: [{id, status, detail}]
+    blockers: Mapped[list] = mapped_column(JSON, default=list)
+    warnings: Mapped[list] = mapped_column(JSON, default=list)
+    audit_summary: Mapped[dict] = mapped_column(JSON, default=dict)  # digital-exposure PASS/WARN/FAIL counts
+    audit: Mapped[dict] = mapped_column(JSON, default=dict)  # the panel's displayed values + notes
+    audit_checks: Mapped[list] = mapped_column(JSON, default=list)  # digital-exposure checks for this panel
+    filings: Mapped[dict] = mapped_column(JSON, default=dict)  # Monday: the 8-Ks it was checked against
+    png: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)  # latest render (the post image once ready)
+    png_sha256: Mapped[str] = mapped_column(String(64), default="")
+    draft_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    alerts: Mapped[dict] = mapped_column(JSON, default=dict)  # which Discord pings were sent
+    log: Mapped[str] = mapped_column(Text, default="")
 
 
 class CalendarEvent(Base):

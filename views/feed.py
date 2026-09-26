@@ -7,8 +7,9 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel.common import STATUS_ICONS, badge, enqueue, esc_html, esc_md, handle, is_owner, pillar_badge
-from xcp import charts, config, db, showcase, xtext
+from xcp import charts, config, db, gh, showcase, xtext
 from xcp.agents import analyst
+from xcp.sources import digital_exposure as de
 from xcp.timeutil import at_ny, days_match, fmt_ago, fmt_ny, now_ny, today_ny, utcnow
 
 settings = config.settings()
@@ -77,6 +78,8 @@ def _mark_posted(draft_id: int, label: str, text_key: str, url_key: str) -> None
             story.status = "used"
         if d.build_idea_id and (idea := s.get(db.BuildIdea, d.build_idea_id)):
             idea.status, idea.updated_at = "shipped", utcnow()
+        if d.kind == "showcase" and (run := showcase.run_for_draft(s, d.id)):
+            run.status, run.updated_at = "posted", utcnow()
         s.commit()
         pillar, tone, kind, style = d.pillar, d.tone, d.kind, v.style if v else None
     analyst.log_post(draft_id, url, text.replace(xtext.THREAD_SEP, "\n\n"), pillar, tone, style, kind)
@@ -174,11 +177,37 @@ def _owner_actions(d: db.Draft, v: db.Variant, parts: list[str], text: str, text
                 width="stretch")
 
 
+RUN_ICONS = {"waiting": "⏳", "blocked": "⚠️", "ready": "🟢", "posted": "✅", "missed": "🔴"}
+
+
+def _showcase_image(run: db.ShowcaseRun) -> None:
+    """The audited Digital Credit Report image for a showcase card."""
+    n = run.audit_summary or {}
+    ours = f"{sum(1 for c in run.checks or [] if c.get('status') == 'PASS')}/{len(run.checks or [])}"
+    st.markdown(
+        f"{badge(RUN_ICONS.get(run.status, '') + ' ' + run.status.upper(), '#17BF63' if run.status in ('ready', 'posted') else '#8899A6')} "
+        f"<span class='xcp-muted'>audited {fmt_ny(run.ready_at or run.updated_at, '%a %I:%M %p')} · digital-exposure "
+        f"{n.get('PASS', 0)} PASS · {n.get('WARN', 0)} WARN · {n.get('FAIL', 0)} FAIL · our checks {ours} · "
+        f"code {run.de_commit[:7]}{' (last-good fallback)' if run.used_fallback else ''}</span>",
+        unsafe_allow_html=True)
+    if run.png:
+        c = st.columns([3, 1.2])
+        c[0].image(run.png, width="stretch")
+        c[1].download_button("⬇️ Download image to attach", run.png, file_name=f"{run.panel}-{run.run_date}.png",
+                             mime="image/png", key=f"scdl_{run.id}", type="primary", width="stretch")
+        c[1].link_button("🌐 Web report", de.report_url(run.panel), width="stretch")
+        c[1].caption("X's composer link can't carry images: download it here (or save it from the Discord 🟢 "
+                     "message), then attach it to the post.")
+    for w in run.warnings or []:
+        st.caption(f"⚠️ {esc_md(w.get('detail', ''))}")
+
+
 def render_draft(d: db.Draft) -> None:
     with db.session() as s:
         variants = db.current_variants(s, d.id)
         pending = db.pending_requests(s, d.id)
         idea = s.get(db.BuildIdea, d.build_idea_id) if d.build_idea_id else None
+        sc_run = showcase.run_for_draft(s, d.id) if d.kind == "showcase" else None
     if not variants:
         return
     by_label = {v.label: v for v in variants}
@@ -197,6 +226,8 @@ def render_draft(d: db.Draft) -> None:
             st.markdown(f"**{esc_md(d.title)}**")
         if pending:
             st.info(f"⏳ {len(pending)} AI request(s) running for this draft. Refresh in a minute.", icon="🛰️")
+        if sc_run:
+            _showcase_image(sc_run)
 
         default = d.chosen_label if d.chosen_label in labels else labels[0]
         choice = st.segmented_control("Option", labels, default=default, key=f"opt_{d.id}",
@@ -280,7 +311,7 @@ with top[0]:
         if not days_match(spec.get("days"), day):
             continue
         posted = any(x.slot == key and x.status == "posted" for x in day_drafts)
-        extra = " · 🛠 showcase" if showcase.is_showcase(key, day) else ""
+        extra = f" · 🛠 {showcase.title(showcase.panel_for(day))}" if showcase.is_showcase(key, day) else ""
         extra += " · optional" if spec.get("optional") else ""
         st.markdown(f"{'✅' if posted else '⬜'} **{spec['label']}** at {spec['post_at']}{extra}")
 
@@ -308,7 +339,7 @@ with top[2]:
     if upcoming:
         t, key = min(upcoming)
         mins = int((t - now).total_seconds() // 60)
-        sc = " · 🛠 showcase" if showcase.is_showcase(key, t.date()) else ""
+        sc = f" · 🛠 {showcase.title(showcase.panel_for(t.date()))}" if showcase.is_showcase(key, t.date()) else ""
         st.metric("Next slot", f"{slot_label(key)} {t.strftime('%I:%M %p').lstrip('0')}",
                   f"in {mins // 60}h {mins % 60}m{sc}", delta_color="off")
     with db.session() as s:
@@ -330,6 +361,33 @@ with top[2]:
             st.caption("Each idea uses a different format from your style library. Most are short, with at most one long.")
             if st.button("Spark ideas", type="primary", key="sp_go"):
                 enqueue("style_sparks", {"n": n_sp, "focus": focus})
+
+def _recheck(panel: str) -> None:
+    ok, why = gh.dispatch("showcase.yml", {"mode": "once", "panel": panel})
+    st.toast("Re-check started in the cloud. The result lands here in 2–4 minutes." if ok
+             else f"Couldn't start the re-check: {why}", icon="🛰️" if ok else "⚠️")
+
+
+# today's showcase status
+sc_panel = showcase.panel_for(day)
+if sc_panel:
+    with db.session() as s:
+        sc_run = showcase.run_for(s, day.isoformat(), sc_panel)
+    spec = showcase.panels().get(sc_panel, {})
+    with st.container(border=True):
+        c = st.columns([5, 1.3])
+        if sc_run is None:
+            c[0].markdown(f"🛠 **Showcase: {spec.get('title')}** · watcher starts {spec.get('start')} ET · "
+                          f"post {spec.get('post')}")
+        else:
+            why = "; ".join(b.get("detail", "") for b in (sc_run.blockers or []))[:300]
+            c[0].markdown(f"🛠 **Showcase: {spec.get('title')}** · {RUN_ICONS.get(sc_run.status, '')} "
+                          f"**{sc_run.status}** · checked {fmt_ago(sc_run.updated_at)} · {sc_run.renders} render(s)"
+                          + (f"  \n<span class='xcp-muted'>{esc_html(why)}</span>" if why and sc_run.status in
+                             ("waiting", "blocked", "missed") else ""), unsafe_allow_html=True)
+        if is_owner() and day == today_ny():
+            c[1].button("🔄 Re-check now", key="sc_recheck", on_click=_recheck, args=(sc_panel,), width="stretch",
+                        help="Render + audit the panel now in the cloud (about 2–4 minutes)")
 
 f = st.columns([2, 2.4, 2, 1.1])
 slot_opts = [k for k in SLOT_ORDER]
@@ -366,6 +424,6 @@ for d in drafts:
         if spec.get("post_at"):
             head += f" · post at {spec['post_at']}"
         if showcase.is_showcase(d.slot, day):
-            head += " · 🛠 showcase slot"
+            head += f" · 🛠 {showcase.title(showcase.panel_for(day))}"
         st.markdown(head)
     render_draft(d)
