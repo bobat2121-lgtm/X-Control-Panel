@@ -21,8 +21,8 @@ if not is_owner():
     st.stop()
 
 settings = config.settings()
-t_agents, t_settings, t_watch, t_voice, t_market, t_cal = st.tabs(
-    ["🛰 Agents", "⚙️ Settings", "👀 Watchlist", "🗣 Voice", "💹 Market inputs", "📅 Calendar"])
+t_agents, t_settings, t_watch, t_voice, t_style, t_market, t_cal = st.tabs(
+    ["🛰 Agents", "⚙️ Settings", "👀 Watchlist", "🗣 Voice", "📚 Style library", "💹 Market inputs", "📅 Calendar"])
 
 # ------------------------------------------------------------------ agents
 with t_agents:
@@ -247,4 +247,72 @@ with t_cal:
                     s.delete(s.get(db.CalendarEvent, e.id))
             s.commit()
         st.toast("Calendar saved", icon="📅")
+        st.rerun()
+
+# ------------------------------------------------------------------ style library
+FORMATS = ["short_observation", "quick_analysis", "long_analysis", "thread", "humor_meme", "contrarian",
+           "data_callout", "news_reaction", "question_hook", "chart_callout"]
+with t_style:
+    with db.session() as s:
+        rows = list(s.scalars(select(db.StyleExample).order_by(db.StyleExample.source.desc(),
+                                                                db.StyleExample.strength.desc())).all())
+    mine_n = sum(1 for r in rows if r.source == "mine")
+    st.caption(f"{mine_n} of your own posts · {len(rows) - mine_n} craft patterns from accounts you admire · "
+               f"{sum(1 for r in rows if r.active)} active. The writer sees your posts first, then a varied, "
+               "mostly-short sample of patterns on every run. Other accounts' wording is never stored.")
+
+    with st.expander("➕ Add your own best posts (highest priority)"):
+        with st.form("add_mine", clear_on_submit=True):
+            txt = st.text_area("Paste posts. Separate several with a line containing only ---", height=180)
+            c = st.columns(3)
+            fmt = c[0].selectbox("Format", FORMATS)
+            pil = c[1].selectbox("Pillar", list(config.pillars()))
+            url = c[2].text_input("Link (optional)")
+            if st.form_submit_button("Add") and txt.strip():
+                from xcp import xtext
+                with db.session() as s:
+                    for post in xtext.split_parts(txt):
+                        s.add(db.StyleExample(source="mine", text=post, format=fmt, pillar=pil, url=url,
+                                              length="long" if len(post) > 600 else "short", strength=9))
+                    s.commit()
+                st.rerun()
+
+    c = st.columns(3)
+    f_src = c[0].multiselect("Source", ["mine", "admired"], default=["mine", "admired"])
+    f_fmt = c[1].multiselect("Format", FORMATS, placeholder="All formats")
+    f_handle = c[2].multiselect("Account", sorted({r.handle for r in rows if r.handle}), placeholder="All accounts")
+    shown = [r for r in rows if r.source in f_src and (not f_fmt or r.format in f_fmt)
+             and (not f_handle or r.handle in f_handle)]
+    df = pd.DataFrame([{"id": r.id, "active": r.active, "strength": r.strength, "source": r.source,
+                        "handle": r.handle, "format": r.format, "length": r.length, "pillar": r.pillar,
+                        "hook": r.hook_type, "pattern": r.pattern, "template": r.skeleton,
+                        "your-lane example": r.demo if r.source != "mine" else r.text, "link": r.url}
+                       for r in shown],
+                      columns=["id", "active", "strength", "source", "handle", "format", "length", "pillar", "hook",
+                               "pattern", "template", "your-lane example", "link"])
+    ed = st.data_editor(df, hide_index=True, width="stretch", key="style_ed", disabled=["id", "source", "handle"],
+                        column_config={
+                            "strength": st.column_config.NumberColumn("strength", min_value=1, max_value=10),
+                            "format": st.column_config.SelectboxColumn("format", options=FORMATS),
+                            "length": st.column_config.SelectboxColumn("length", options=["short", "medium", "long"]),
+                            "pillar": st.column_config.SelectboxColumn("pillar", options=list(config.pillars())),
+                            "pattern": st.column_config.TextColumn("pattern", width="large"),
+                            "template": st.column_config.TextColumn("template", width="large"),
+                            "your-lane example": st.column_config.TextColumn("your-lane example", width="large"),
+                            "link": st.column_config.LinkColumn("link", display_text="source ↗")})
+    if st.button("💾 Save library changes", type="primary"):
+        with db.session() as s:
+            for r in ed.to_dict("records"):
+                row = s.get(db.StyleExample, int(r["id"]))
+                if row is None:
+                    continue
+                row.active, row.strength = bool(r["active"]), int(r["strength"] or 7)
+                row.format, row.length, row.pillar = r["format"], r["length"], r["pillar"]
+                row.hook_type, row.pattern, row.skeleton = r["hook"] or "", r["pattern"] or "", r["template"] or ""
+                if row.source == "mine":
+                    row.text = r["your-lane example"] or row.text
+                else:
+                    row.demo = r["your-lane example"] or ""
+            s.commit()
+        st.toast("Style library saved", icon="📚")
         st.rerun()

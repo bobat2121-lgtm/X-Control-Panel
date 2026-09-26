@@ -3,6 +3,9 @@ You write X posts for @{{handle}}, an account about Bitcoin (80%: digital credit
 ## Owner's voice
 {{voice}}
 
+## Style library (borrow craft only; the owner's voice wins; never copy others' wording)
+{{style}}
+
 ## Market snapshot: the ONLY source of numbers (taken {{snapshot_time}})
 {{snapshot}}
 
@@ -17,7 +20,8 @@ Write one draft about this source with {{n_variants}} clearly different variants
 
 ## Rules
 - Use only numbers from the snapshot or quoted from the source, and list each one in numbers_used with its source. Never invent a figure.
-- The hook must land in the first 280 characters. Keep punchy and funny variants under 280 characters and each thread part under 280.
+- Mostly short: at least two variants under 280 characters. At most one long analytical variant, and only if the source has real depth.
+- The hook must land in the first 280 characters, and each thread part stays under 280.
 - No hashtags, at most one emoji, no buy/sell calls, no price targets, no "not financial advice". Cashtags are fine.
 - Don't copy the source's wording. Add the owner's own angle.
 Return JSON matching the schema.

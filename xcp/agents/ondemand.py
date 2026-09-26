@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from sqlalchemy import select
 
@@ -22,7 +23,7 @@ REWRITE_PRESETS = {
     "single": "Condense into one single post (not a thread).",
 }
 LLM_KINDS = {"rewrite", "draft_from_url", "draft_from_text", "draft_from_story", "regenerate", "idea_from_story",
-             "idea_remix", "ideas_generate"}
+             "idea_remix", "ideas_generate", "style_sparks"}
 
 
 def pending(kind: str | None = None) -> list[db.Request]:
@@ -136,7 +137,8 @@ def _single_draft(source_text: str, angle: str, n_variants: int = 3) -> tuple[di
                 "numbers_used": [], "chart_hint": "none"}
 
     prompt = llm.render_prompt("single_draft", handle=context.handle(), voice=config.get("voice"),
-                               snapshot=snap_text, snapshot_time=snap_time, source=source_text,
+                               style=context.style_block(None, n=8), snapshot=snap_text,
+                               snapshot_time=snap_time, source=source_text,
                                angle=angle or "(none)", n_variants=str(n_variants))
     return llm.run_json(prompt, "single_draft", mock=mock), flat
 
@@ -246,12 +248,51 @@ def h_idea_remix(p: dict) -> dict:
     return {"idea_ids": strategist.save_ideas(out.get("ideas", []), note=f"{mode} of #{idea.id}")}
 
 
+def h_style_sparks(p: dict) -> dict:
+    """Fresh drafts, each in a different format from the style library."""
+    n = max(1, min(int(p.get("n", 5)), 10))
+    snap_text, snap_time, flat = context.snapshot_block()
+    since = (today_ny() - timedelta(days=2)).isoformat()
+    with db.session() as s:
+        stories = s.scalars(select(db.Story).where(db.Story.slot_date >= since)
+                            .order_by(db.Story.score.desc()).limit(15)).all()
+    stories_text = "\n".join(f"- [{x.pillar}] {x.title}: {x.summary[:220]}" for x in stories) or "(none yet)"
+
+    def mock():
+        fmts = ["short_observation", "quick_analysis", "humor_meme", "contrarian", "long_analysis"]
+        return {"drafts": [{"title": f"[mock spark] {f}", "pillar": "digital_credit", "tone": "analytical",
+                            "format": f, "text": f"[mock {f}] STRC keeps hugging par.", "numbers_used": []}
+                           for f in fmts[:n]]}
+
+    prompt = llm.render_prompt("sparks", handle=context.handle(), voice=config.get("voice"),
+                               style=context.style_block(None, n=16, seed=utcnow().isoformat()),
+                               stories=stories_text, snapshot=snap_text, snapshot_time=snap_time,
+                               focus=p.get("focus", "") or "(none)", n=str(n))
+    out = llm.run_json(prompt, "sparks", mock=mock)
+    ids = []
+    with db.session() as s:
+        for dr in out.get("drafts", [])[:n]:
+            parts = xtext.split_parts(dr["text"])
+            d = db.Draft(slot="on_demand", slot_date=today_ny().isoformat(), kind="regular", pillar=dr["pillar"],
+                         lane=config.pillar_lane(dr["pillar"]), tone=dr["tone"],
+                         title=f"✨ {dr.get('format', '')}: {dr.get('title', '')}"[:200],
+                         numbers=dr.get("numbers_used", []),
+                         editor_flags=[f"A: {f}" for f in editor.check_variant(parts, flat, [])])
+            s.add(d)
+            s.flush()
+            db.add_variant_version(s, d.id, "A", parts, "thread" if len(parts) > 1 else "punchy", "ai:spark")
+            ids.append(d.id)
+        s.commit()
+    return {"draft_ids": ids}
+
+
 def h_ideas_generate(p: dict) -> dict:
     out = strategist.generate(n=int(p.get("n", 3)), focus=p.get("focus", ""))
     return {"idea_ids": strategist.save_ideas(out.get("ideas", []), note="Generated from the panel")}
 
 
 HANDLERS = {
+    "style_sparks": h_style_sparks,
     "ideas_generate": h_ideas_generate,
     "draft_from_url": h_draft_from_url,
     "draft_from_text": h_draft_from_text,

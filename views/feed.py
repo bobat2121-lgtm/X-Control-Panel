@@ -324,6 +324,12 @@ with top[2]:
                     enqueue("draft_from_url", {"url": src_in.strip(), "angle": angle})
                 else:
                     enqueue("draft_from_text", {"text": src_in.strip(), "angle": angle})
+        with st.expander("✨ Spark post ideas from my style library"):
+            n_sp = st.slider("How many", 3, 10, 5, key="sp_n")
+            focus = st.text_input("Focus (optional)", key="sp_focus", placeholder="e.g. STRC daily dividends")
+            st.caption("Each idea uses a different format from your style library. Most are short, with at most one long.")
+            if st.button("Spark ideas", type="primary", key="sp_go"):
+                enqueue("style_sparks", {"n": n_sp, "focus": focus})
 
 f = st.columns([2, 2.4, 2, 1.1])
 slot_opts = [k for k in SLOT_ORDER]

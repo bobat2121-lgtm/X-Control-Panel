@@ -210,6 +210,32 @@ class Run(Base):
     x_reads: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class StyleExample(Base):
+    """Voice & style library. 'mine' = your own best posts (verbatim, highest priority).
+    'admired' = craft patterns learned from accounts you admire: pattern, skeleton and an original
+    demo in your lane, plus a link. Their wording is never stored or reused."""
+    __tablename__ = "style_examples"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    source: Mapped[str] = mapped_column(String(10), default="admired", index=True)  # admired | mine
+    handle: Mapped[str] = mapped_column(String(80), default="")
+    url: Mapped[str] = mapped_column(Text, default="")
+    format: Mapped[str] = mapped_column(String(30), default="short_observation", index=True)
+    # short_observation | quick_analysis | long_analysis | thread | humor_meme | contrarian | data_callout
+    # | news_reaction | question_hook | chart_callout
+    length: Mapped[str] = mapped_column(String(10), default="short")  # short | medium | long
+    pillar: Mapped[str] = mapped_column(String(30), default="bitcoin")
+    hook_type: Mapped[str] = mapped_column(String(60), default="")
+    pattern: Mapped[str] = mapped_column(Text, default="")  # how the post is built
+    skeleton: Mapped[str] = mapped_column(Text, default="")  # fill-in-the-blanks template
+    demo: Mapped[str] = mapped_column(Text, default="")  # original example in your lane
+    why_it_works: Mapped[str] = mapped_column(Text, default="")
+    text: Mapped[str] = mapped_column(Text, default="")  # verbatim ONLY for source == 'mine'
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    strength: Mapped[int] = mapped_column(Integer, default=7)  # 1-10
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+
 class CalendarEvent(Base):
     __tablename__ = "calendar_events"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

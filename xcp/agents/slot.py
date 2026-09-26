@@ -101,7 +101,8 @@ def run_slot(slot: str) -> dict:
     prompt = llm.render_prompt(
         "slot", handle=context.handle(), slot_label=spec.get("label", slot), post_at=spec.get("post_at", ""),
         weekday=dayname(d).title(), date=date_str, lane=lane, slot_brief=SLOT_BRIEFS.get(slot, ""),
-        voice=config.get("voice"), mix=context.mix_block(), snapshot=snap_text, snapshot_time=snap_time,
+        voice=config.get("voice"), style=context.style_block(lane, seed=f"{date_str}-{slot}"),
+        mix=context.mix_block(), snapshot=snap_text, snapshot_time=snap_time,
         calendar=context.calendar_block(), recent=context.recent_block(),
         items=context.items_block(items, int(limits.get("item_text_chars", 600))),
         showcase_block=sc_block, showcase_task=sc_task, max_stories=str(max(n_stories + 2, 5)),

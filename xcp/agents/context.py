@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import random
 from datetime import timedelta
 
 from sqlalchemy import select
@@ -10,6 +11,41 @@ from xcp import config, db
 from xcp.agents import analyst
 from xcp.sources import market
 from xcp.timeutil import fmt_ago, today_ny, utcnow
+
+
+def style_block(lane: str | None = None, n: int = 12, seed: str = "") -> str:
+    """Your best posts first, then a varied, mostly-short sample of craft patterns from the style library."""
+    with db.session() as s:
+        rows = list(s.scalars(select(db.StyleExample).where(db.StyleExample.active.is_(True))).all())
+    mine = sorted([r for r in rows if r.source == "mine"], key=lambda r: -r.strength)[:8]
+    admired = [r for r in rows if r.source != "mine"]
+    rng = random.Random(seed or today_ny().isoformat())
+
+    def rank(r):  # strength, lane fit, a little randomness for variety between runs
+        fit = 1.5 if lane and config.pillar_lane(r.pillar) == lane else 0.0
+        return r.strength + fit + rng.random() * 2.5
+
+    picked, per_format, longs = [], {}, 0
+    for r in sorted(admired, key=rank, reverse=True):
+        if len(picked) >= n:
+            break
+        if per_format.get(r.format, 0) >= 2 or (r.length == "long" and longs >= 2):
+            continue
+        picked.append(r)
+        per_format[r.format] = per_format.get(r.format, 0) + 1
+        longs += r.length == "long"
+
+    lines = []
+    if mine:
+        lines.append("YOUR OWN BEST POSTS (the voice to match; these win any conflict):")
+        lines += [f"- {' '.join(r.text.split())[:500]}" for r in mine]
+    if picked:
+        lines.append("CRAFT PATTERNS learned from accounts you admire (borrow structure only; never reuse their "
+                     "wording, facts or jokes):")
+        for r in picked:
+            lines.append(f"- [{r.format} · {r.length} · hook: {r.hook_type}] {r.pattern} | Template: {r.skeleton} "
+                         f"| In your lane: {r.demo}")
+    return "\n".join(lines) or "(style library is empty)"
 
 
 def handle() -> str:

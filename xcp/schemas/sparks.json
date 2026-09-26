@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["drafts"],
+  "properties": {
+    "drafts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "pillar", "tone", "format", "text", "numbers_used"],
+        "properties": {
+          "title": {"type": "string"},
+          "pillar": {"type": "string", "enum": ["digital_credit", "bitcoin", "macro", "ai_models", "ai_benchmarks", "physical_ai"]},
+          "tone": {"type": "string", "enum": ["analytical", "timely", "funny"]},
+          "format": {"type": "string"},
+          "text": {"type": "string", "description": "the post; for a thread separate parts with a line containing only ---"},
+          "numbers_used": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["label", "value", "source"],
+              "properties": {
+                "label": {"type": "string"},
+                "value": {"type": "string"},
+                "source": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
