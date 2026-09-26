@@ -337,6 +337,10 @@ def stream(hours: int = 24, kinds: tuple[str, ...] = ("news", "filing", "x_post"
     with db.session() as s:
         rows = list(s.scalars(select(db.Item).where(db.Item.fetched_at >= since, db.Item.kind.in_(list(kinds)))).all())
     rows = [r for r in rows if aware(r.created_at or r.fetched_at) >= since]
+    handles = watchlist_handles()
+    for r in rows:  # posts collected before the monitor existed carry no flag; tag them in memory by author
+        if r.kind == "x_post" and (r.author or "").lower() in handles and not (r.meta or {}).get("watchlist"):
+            r.meta = {**(r.meta or {}), "watchlist": True}
     if watchlist_only:
         rows = [r for r in rows if (r.meta or {}).get("watchlist")]
     groups: dict[str, list[db.Item]] = {}
