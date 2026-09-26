@@ -1,5 +1,12 @@
 [theme]
-primaryColor = "#F7931A"
+base = "light"
+primaryColor = "#6B7A26"
+backgroundColor = "#F7F2E7"
+secondaryBackgroundColor = "#EEE5D1"
+textColor = "#0E0E0C"
+borderColor = "#0E0E0C"
+linkColor = "#0E0E0C"
+baseRadius = "0.15rem"
 
 [server]
 headless = true

@@ -4,9 +4,11 @@ from __future__ import annotations
 import hmac
 import html
 import os
+import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import streamlit as st
 
@@ -14,23 +16,12 @@ from xcp import config, db, gh
 from xcp.config import ROOT, env
 from xcp.timeutil import fmt_ago, parse_iso
 
-PILLAR_COLORS = {
-    "digital_credit": "#F7931A", "bitcoin": "#E8A33D", "macro": "#5B7083", "stablecoins": "#26A17B",
-    "legislation": "#8E44AD", "ai_models": "#7C4DFF", "ai_benchmarks": "#3F51B5", "ai_payments": "#00ACC1",
-    "physical_ai": "#00897B",
-}
+# Every pillar badge uses the same palette; a glyph tells them apart (olive stays reserved for emphasis).
+PILLAR_GLYPHS = {"digital_credit": "◆", "bitcoin": "₿", "macro": "◷", "stablecoins": "＄", "legislation": "§",
+                 "ai_models": "◈", "ai_benchmarks": "▤", "ai_payments": "⇄", "physical_ai": "⚙"}
 STATUS_ICONS = {"new": "🆕", "edited": "✏️", "posted": "✅", "dismissed": "🗑", "banked": "⭐", "snoozed": "⏰"}
-
-CSS = """
-<style>
-.block-container {padding-top: 3.2rem; max-width: 1180px;}
-.xcp-badge {display:inline-block; padding:1px 8px; border-radius:999px; font-size:0.75rem; font-weight:600;
-            margin-right:4px; color:white;}
-.xcp-muted {color:#8899A6; font-size:0.8rem;}
-.xcp-src {border-left:3px solid #CFD9DE; padding:4px 10px; margin:4px 0; font-size:0.85rem;}
-div[data-testid="stMetricValue"] {font-size:1.15rem;}
-</style>
-"""
+TONES = ("ink", "tan", "paper", "olive", "hot", "new")
+CSS_PATH = Path(__file__).with_name("theme.css")
 
 
 def boot() -> None:
@@ -42,7 +33,7 @@ def boot() -> None:
     except Exception:  # no secrets.toml locally is fine
         pass
     db.engine()
-    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
 
 def is_owner() -> bool:
@@ -79,21 +70,58 @@ def owner_bar() -> None:
 
 def esc_md(text) -> str:
     """Escape '$' so Streamlit markdown doesn't render '$BTC ... $84k' as LaTeX."""
-    return str(text or "").replace("$", "\\$")
+    return ("" if text is None else str(text)).replace("$", "\\$")
 
 
 def esc_html(text) -> str:
     """For scanned/LLM text inside unsafe_allow_html blocks: HTML-escape and neutralize '$'."""
-    return html.escape(str(text or "")).replace("$", "&#36;")
+    return html.escape("" if text is None else str(text)).replace("$", "&#36;")
 
 
-def badge(text: str, color: str = "#5B7083") -> str:
-    return f'<span class="xcp-badge" style="background:{color}">{esc_html(text)}</span>'
+def badge(text: str, tone: str = "ink") -> str:
+    """tone: ink | tan | paper | olive | hot (olive, pulsing) | new (blinking)."""
+    return f'<span class="xcp-badge xcp-b-{tone if tone in TONES else "ink"}">{esc_html(text)}</span>'
 
 
 def pillar_badge(pillar: str) -> str:
     label = config.pillars().get(pillar, {}).get("label", pillar)
-    return badge(label, PILLAR_COLORS.get(pillar, "#5B7083"))
+    return badge(f"{PILLAR_GLYPHS.get(pillar, '•')} {label}", "tan")
+
+
+def hero(app: str, headline: str, sub: str = "", stats: list[tuple] | None = None, kicker: str = "",
+         ticker: list[str] | None = None, icon: str = "▣") -> None:
+    """Page banner: XP title bar, big headline (wrap words in <em> for olive), stat tiles, scrolling ticker.
+
+    stats: (value, label) or (value, label, hot). ticker items are plain text; prefix "NEW:" to flag one.
+    headline may contain <em>; everything else is escaped."""
+    who = handle()
+    tiles = "".join(f'<div class="xcp-stat{" hot" if len(x) > 2 and x[2] else ""}"><div class="v">{esc_html(x[0])}</div>'
+                    f'<div class="l">{esc_html(x[1])}</div></div>' for x in (stats or []))
+    items = []
+    for t in ticker or []:
+        new = t.startswith("NEW:")
+        body = esc_html(t[4:].strip() if new else t)
+        tag = '<b class="new">NEW!</b>' if new else ""
+        items.append(f'<span>{tag}{body}</span><span class="sep">✦</span>')
+    marquee = (f'<div class="xcp-marquee"><div class="xcp-track">{"".join(items) * 2}</div></div>' if items else "")
+    safe_headline = esc_html(headline).replace("&lt;em&gt;", "<em>").replace("&lt;/em&gt;", "</em>")
+    st.markdown(
+        f'<section class="xcp-hero"><div class="xcp-tb"><span class="xcp-tb-l">{esc_html(icon)} {esc_html(app)}'
+        f'{" — @" + esc_html(who) if who else ""}</span><span class="xcp-tb-r"><i>_</i><i>▢</i><i class="x">✕</i></span></div>'
+        f'<div class="xcp-hero-in"><div><div class="xcp-kicker"><span class="dot">●</span> {esc_html(kicker)}'
+        f'<span class="caret"></span></div><h1 class="xcp-h1">{safe_headline}</h1>'
+        f'<p class="xcp-sub">{esc_html(sub)}</p></div><div class="xcp-stats">{tiles}</div></div>{marquee}</section>',
+        unsafe_allow_html=True)
+
+
+def section(title: str, note: str = "") -> None:
+    st.markdown(f'<div class="xcp-sec"><span class="bar"></span><h3>{esc_html(title)}</h3>'
+                f'<span class="note">{esc_html(note)}</span></div>', unsafe_allow_html=True)
+
+
+def card_key(prefix: str, raw) -> str:
+    """A container key the theme styles: 'card…' (window) or 'hot…' (olive, pulsing)."""
+    return prefix + "_" + re.sub(r"[^A-Za-z0-9_-]", "-", str(raw))
 
 
 def handle() -> str:
@@ -106,46 +134,51 @@ def _fmt_px(v, prefix="$", dec=2):
     return "—" if v is None else f"{prefix}{v:,.{dec}f}"
 
 
+def _cell(key: str, value: str, chg=None) -> str:
+    move = ""
+    if chg is not None:
+        move = f'<span class="{"up" if chg >= 0 else "dn"}">{"▲" if chg >= 0 else "▼"}{abs(chg):.2f}%</span>'
+    return f'<div class="xcp-cell"><span class="k">{esc_html(key)}</span><span class="v">{esc_html(value)}</span>{move}</div>'
+
+
 def market_strip() -> None:
+    """The market tape: an XP-style status bar of sunken cells under the nav."""
     snap = db.latest_snapshot()
     if not snap:
         st.caption("No market snapshot yet. It updates with every agent run, or use Refresh.")
         return
     d = snap.data
     eq, der, btc = d.get("equities", {}), d.get("derived", {}), d.get("btc", {})
-    cols = st.columns([1.2, 1, 1, 1, 1, 1, 1, 0.6])
-    cols[0].metric("BTC", _fmt_px(btc.get("price"), dec=0),
-                   f"{btc.get('chg_24h_pct', 0):+.2f}% 24h" if btc.get("chg_24h_pct") is not None else None)
-    for col, t in zip(cols[1:4], ("MSTR", "STRC", "SATA")):
+    cells = [_cell("BTC", _fmt_px(btc.get("price"), dec=0), btc.get("chg_24h_pct"))]
+    for t in ("MSTR", "ASST", "STRC", "SATA"):
         row = eq.get(t, {})
-        col.metric(t, _fmt_px(row.get("price")), f"{row['chg_pct']:+.2f}%" if "chg_pct" in row else None)
-    mnav = der.get("mstr_basic_mnav")
-    cols[4].metric("mNAV (basic)", f"{mnav:.2f}x" if mnav else "set holdings")
-    tnx = eq.get("^TNX", {})
-    cols[5].metric("US 10Y", f"{tnx['price']:.2f}%" if tnx.get("price") else "—",
-                   f"{tnx['chg_pct']:+.2f}%" if "chg_pct" in tnx else None, delta_color="off")
-    dxy = eq.get("DX-Y.NYB", {})
-    cols[6].metric("DXY", f"{dxy['price']:.2f}" if dxy.get("price") else "—",
-                   f"{dxy['chg_pct']:+.2f}%" if "chg_pct" in dxy else None, delta_color="off")
-    if is_owner() and cols[7].button("↻", help=f"Refresh market data (last: {fmt_ago(parse_iso(d.get('as_of')))})"):
+        if row.get("price") is not None:
+            cells.append(_cell(t, _fmt_px(row.get("price")), row.get("chg_pct")))
+    for t, key in (("MSTR", "mstr_basic_mnav"), ("ASST", "asst_basic_mnav")):
+        if der.get(key):
+            cells.append(_cell(f"{t} mNAV", f"{der[key]:.2f}x"))
+    tnx, dxy = eq.get("^TNX", {}), eq.get("DX-Y.NYB", {})
+    if tnx.get("price"):
+        cells.append(_cell("US10Y", f"{tnx['price']:.2f}%", tnx.get("chg_pct")))
+    if dxy.get("price"):
+        cells.append(_cell("DXY", f"{dxy['price']:.2f}", dxy.get("chg_pct")))
+    bits = [f"snapshot {d.get('as_of_ny', '')}"]
+    for t in ("strc", "sata"):
+        if der.get(f"{t}_vs_par") is not None:
+            bits.append(f"{t.upper()} vs par {der[f'{t}_vs_par']:+.2f}")
+    fg = d.get("sentiment", {}).get("fear_greed", {})
+    if fg.get("value") is not None:
+        bits.append(f"F&G {fg['value']:.0f} {fg.get('label', '')}")
+    cells.append(f'<div class="xcp-cell meta">{esc_html(" · ".join(bits))}</div>')
+    c = st.columns([16, 1]) if is_owner() else [st.container()]
+    c[0].markdown(f'<div class="xcp-tape">{"".join(cells)}</div>', unsafe_allow_html=True)
+    if is_owner() and c[1].button("↻", help=f"Refresh market data (last: {fmt_ago(parse_iso(d.get('as_of')))})",
+                                  width="stretch", key="tape_refresh"):
         from xcp.sources import market
 
         with st.spinner("Refreshing market data…"):
             market.take_snapshot()
         st.rerun()
-    strc_gap = der.get("strc_vs_par")
-    bits = [f"Snapshot {d.get('as_of_ny', '')}"]
-    if strc_gap is not None:
-        bits.append(f"STRC vs par {strc_gap:+.2f}")
-    if der.get("sata_vs_par") is not None:
-        bits.append(f"SATA vs par {der['sata_vs_par']:+.2f}")
-    fg = d.get("sentiment", {}).get("fear_greed", {})
-    if fg.get("value") is not None:
-        bits.append(f"Fear & Greed {fg['value']:.0f} ({fg.get('label', '')})")
-    oc = d.get("onchain", {})
-    if oc.get("hashrate_ehs"):
-        bits.append(f"Hashrate {oc['hashrate_ehs']} EH/s")
-    st.caption(" · ".join(bits))
 
 
 # ------------------------------------------------------------------ agent queue

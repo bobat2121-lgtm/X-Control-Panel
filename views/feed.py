@@ -6,7 +6,8 @@ from datetime import timedelta
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import STATUS_ICONS, badge, enqueue, esc_html, esc_md, handle, is_owner, pillar_badge
+from panel.common import (STATUS_ICONS, badge, card_key, enqueue, esc_html, esc_md, handle, hero, is_owner, pillar_badge,
+                          section)
 from xcp import charts, config, db, gh, showcase, xtext
 from xcp.agents import analyst
 from xcp.sources import digital_exposure as de
@@ -185,7 +186,7 @@ def _showcase_image(run: db.ShowcaseRun) -> None:
     n = run.audit_summary or {}
     ours = f"{sum(1 for c in run.checks or [] if c.get('status') == 'PASS')}/{len(run.checks or [])}"
     st.markdown(
-        f"{badge(RUN_ICONS.get(run.status, '') + ' ' + run.status.upper(), '#17BF63' if run.status in ('ready', 'posted') else '#8899A6')} "
+        f"{badge(RUN_ICONS.get(run.status, '') + ' ' + run.status.upper(), 'hot' if run.status == 'ready' else 'paper')} "
         f"<span class='xcp-muted'>audited {fmt_ny(run.ready_at or run.updated_at, '%a %I:%M %p')} · digital-exposure "
         f"{n.get('PASS', 0)} PASS · {n.get('WARN', 0)} WARN · {n.get('FAIL', 0)} FAIL · our checks {ours} · "
         f"code {run.de_commit[:7]}{' (last-good fallback)' if run.used_fallback else ''}</span>",
@@ -214,11 +215,12 @@ def render_draft(d: db.Draft) -> None:
     labels = list(by_label)
     flags = d.editor_flags or []
 
-    with st.container(border=True):
+    with st.container(border=True, key=card_key("hot" if d.kind == "showcase" and d.status != "posted" else "card",
+                                                f"draft_{d.id}")):
         chips = []
         if d.kind == "showcase":
-            chips.append(badge("🛠 SHOWCASE", "#E0245E"))
-        chips += [pillar_badge(d.pillar), badge(d.tone, "#8899A6")]
+            chips.append(badge("🛠 SHOWCASE", "hot"))
+        chips += [pillar_badge(d.pillar), badge(d.tone, "paper")]
         chips.append(f'<span class="xcp-muted">{STATUS_ICONS.get(d.status, "")} {d.status} · score {d.score:.1f} · '
                      f'{fmt_ago(d.created_at)}</span>')
         st.markdown(" ".join(chips), unsafe_allow_html=True)
@@ -302,6 +304,34 @@ def render_draft(d: db.Draft) -> None:
 
 # ------------------------------------------------------------------ page
 
+_today = today_ny()
+with db.session() as _s:
+    _mine = [x for x in _s.scalars(select(db.Draft).where(db.Draft.slot_date == _today.isoformat())).all()
+             if x.status != "dismissed" and x.kind in ("regular", "showcase")]
+_now = now_ny()
+_next = None
+for _off in range(0, 8):
+    _dd = _now.date() + timedelta(days=_off)
+    _cands = [(at_ny(_dd, sp["post_at"]), k) for k, sp in SLOTS.items()
+              if days_match(sp.get("days"), _dd) and at_ny(_dd, sp["post_at"]) > _now]
+    if _cands:
+        _next = min(_cands)
+        break
+_mix = analyst.mix(7)
+_ai = _mix["shares"].get("ai", 0.0)
+_sched = [f"{'✅' if any(x.slot == k and x.status == 'posted' for x in _mine) else '⬜'} {sp['label']} {sp['post_at']}"
+          + (f" · 🛠 {showcase.title(showcase.panel_for(_today))}" if showcase.is_showcase(k, _today) else "")
+          for k, sp in SLOTS.items() if days_match(sp.get("days"), _today)]
+hero("FEED.EXE", "Your posts, <em>ready to ship</em>.",
+     "Everything you've written from the Monitor, plus showcase images. Edit, post, mark it posted, and it joins "
+     "your voice library.",
+     stats=[(len(_mine), "written today"), (sum(1 for x in _mine if x.status == "posted"), "posted today"),
+            (_next[0].strftime("%I:%M %p").lstrip("0") if _next else "—",
+             f"next · {slot_label(_next[1])}" if _next else "next slot"),
+            (f"{_ai:.0f}%", f"AI share 7d · target {_mix['targets'].get('ai', 20)}%", abs(_ai - _mix['targets'].get('ai', 20)) > 10
+             and _mix["total"] >= 5)],
+     kicker=f"{_today:%A %b %d} · {_mix['total']} posts in the last 7 days", ticker=_sched, icon="📰")
+
 top = st.columns([1.15, 1.5, 1.35], gap="large")
 with top[0]:
     day = st.date_input("Day", value=today_ny(), format="MM/DD/YYYY")
@@ -321,7 +351,7 @@ with top[1]:
     for group, target in m["targets"].items():
         share = m["shares"].get(group, 0.0)
         gap = share - target
-        icon = "🟢" if abs(gap) <= 7 or m["total"] < 5 else ("🔺" if gap > 0 else "🔻")
+        icon = "■" if abs(gap) <= 7 or m["total"] < 5 else ("▲" if gap > 0 else "▼")
         st.progress(min(share / 100, 1.0), text=f"{icon} {TARGET_LABELS.get(group, group)}: {share:.0f}% "
                                                     f"(target {target}%)")
 
@@ -374,7 +404,7 @@ if sc_panel:
     with db.session() as s:
         sc_run = showcase.run_for(s, day.isoformat(), sc_panel)
     spec = showcase.panels().get(sc_panel, {})
-    with st.container(border=True):
+    with st.container(border=True, key=card_key("hot" if sc_run and sc_run.status == "ready" else "card", "scstatus")):
         c = st.columns([5, 1.3])
         if sc_run is None:
             c[0].markdown(f"🛠 **Showcase: {spec.get('title')}** · watcher starts {spec.get('start')} ET · "
@@ -424,10 +454,8 @@ for d in drafts:
     if d.slot != current:
         current = d.slot
         spec = SLOTS.get(d.slot, {})
-        head = f"### {slot_label(d.slot)}"
-        if spec.get("post_at"):
-            head += f" · post at {spec['post_at']}"
+        note = f"post at {spec['post_at']}" if spec.get("post_at") else ""
         if showcase.is_showcase(d.slot, day):
-            head += f" · 🛠 {showcase.title(showcase.panel_for(day))}"
-        st.markdown(head)
+            note += f" · showcase: {showcase.title(showcase.panel_for(day))}"
+        section(slot_label(d.slot), note)
     render_draft(d)

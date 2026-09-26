@@ -7,13 +7,13 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import enqueue, is_owner
+from panel.common import badge, enqueue, hero, is_owner, section
 from xcp import config, db, gh, notify, showcase
 from xcp import voice as voice_mod
 from xcp.agents.collect import x_reads_this_month, x_reads_today
 from xcp.config import env
 from xcp.sources import calendar_feeds, issuers
-from xcp.timeutil import fmt_ny, parse_iso, today_ny
+from xcp.timeutil import fmt_ago, fmt_ny, parse_iso, today_ny
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 CODEX_MODELS = {  # from OpenAI's Codex model list (Sept 2026)
@@ -30,6 +30,22 @@ if not is_owner():
     st.stop()
 
 settings = config.settings()
+_lim = settings.get("limits", {})
+_reads, _cap = x_reads_this_month(), int(_lim.get("x_monthly_post_cap", 4000))
+_mon = db.kv_get("monitor:last_run") or {}
+with db.session() as _s:
+    _recent = list(_s.scalars(select(db.Run).where(db.Run.job != "monitor").order_by(db.Run.started_at.desc()).limit(8)).all())
+    _queued = len(db.pending_requests(_s))
+_mode = settings.get("writer", {}).get("mode", "monitor")
+hero("CONTROLROOM.EXE", "The <em>engine room</em>.",
+     "Agents, schedule, sources, voice and budgets. Everything the monitor and desk run on.",
+     stats=[(f"{_reads:,}", f"X reads this month · cap {_cap:,}", _reads > .8 * _cap),
+            (fmt_ago(parse_iso(_mon.get("at"))) if _mon.get("at") else "—", "monitor last ran"),
+            ("Monitor" if _mode == "monitor" else "Drafts", "writer mode"),
+            (_queued, "AI requests queued", _queued > 0)],
+     kicker=f"≈ ${_reads * 0.005:.2f} of ${_cap * 0.005:.0f} X budget used", icon="⚙️",
+     ticker=[f"{'✅' if r.status == 'ok' else '❌' if r.status == 'error' else '⏳'} {r.job} · {fmt_ny(r.started_at)}"
+             for r in _recent])
 t_agents, t_show, t_settings, t_watch, t_voice, t_style, t_market, t_cal = st.tabs(
     ["🛰 Agents", "🛠 Showcase", "⚙️ Settings", "👀 Watchlist", "🗣 Voice & rules", "📚 Style library",
      "💹 Market inputs", "📅 Calendar"])
@@ -50,7 +66,8 @@ with t_agents:
     ]
     c = st.columns(len(checks))
     for col, (name, val, ok) in zip(c, checks):
-        col.markdown(f"{'🟢' if ok else '🟡'} **{name}**  \n<span class='xcp-muted'>{val}</span>", unsafe_allow_html=True)
+        col.markdown(f"{badge('ON', 'olive') if ok else badge('SET UP', 'paper')} **{name}**  \n"
+                     f"<span class='xcp-muted'>{val}</span>", unsafe_allow_html=True)
 
     lim = settings.get("limits", {})
     month_reads, month_cap = x_reads_this_month(), int(lim.get("x_monthly_post_cap", 4000))
@@ -59,7 +76,7 @@ with t_agents:
                f"\\$0.005/post; manual style refreshes excluded)")
     st.progress(min(month_reads / month_cap, 1.0) if month_cap else 0.0)
 
-    st.markdown("#### Run now")
+    section("Run now", "starts in the cloud")
     jobs = ["monitor"] + list(settings["slots"]) + ["nightly", "weekly", "snapshot", "style_refresh"]
     labels = {**{k: v.get("label", k) for k, v in settings["slots"].items()}, "monitor": "📡 Monitor",
               "nightly": "🌙 Nightly (metrics + ideas)", "weekly": "📅 Weekly review", "snapshot": "💹 Market snapshot",
@@ -68,11 +85,12 @@ with t_agents:
     st.caption("Writer mode: " + ("🗞 **Monitor**: the slots write desk briefs and you write the posts."
                                   if mode == "monitor" else "✍️ **Drafts**: the slots write post drafts.")
                + " Change it in Settings.")
-    cols = st.columns(len(jobs))
-    for col, j in zip(cols, jobs):
-        col.button(labels[j], key=f"run_{j}", width="stretch", on_click=enqueue, args=("run_job", {"job": j}))
+    with st.container(horizontal=True, gap="small"):
+        for j in jobs:
+            st.button(labels[j], key=f"run_{j}", on_click=enqueue, args=("run_job", {"job": j}),
+                      type="primary" if j == "monitor" else "secondary")
 
-    st.markdown("#### Recent runs")
+    section("Recent runs")
     with db.session() as s:
         runs = list(s.scalars(select(db.Run).where(db.Run.job != "monitor").order_by(db.Run.started_at.desc())
                               .limit(40)).all())
@@ -90,7 +108,7 @@ with t_agents:
                          + (f" · X reads {r.x_reads}" if r.x_reads else "")):
             st.json(r.stats or {}, expanded=False)
             st.code(r.log or "(no log)", language=None)
-    st.markdown("#### Request queue")
+    section("Request queue")
     if reqs:
         st.dataframe([{"id": r.id, "kind": r.kind, "status": r.status, "created": fmt_ny(r.created_at),
                        "error": r.error or ""} for r in reqs], hide_index=True, width="stretch")
@@ -149,13 +167,13 @@ with t_show:
     b[3].button("🧪 Preflight all three", on_click=_sc_dispatch, args=("preflight", ""), width="stretch",
                 help="Renders all three panels and reports anything broken. Posts nothing")
 
-    st.markdown("#### Lineup")
+    section("Lineup", "next two weeks")
     st.dataframe([{"date": f"{r['date']:%a %b %d}", "panel": r["title"], "slot": r["label"], "post": r["post"],
                    "window (ET)": r["window"],
                    "status": (RUN_ICONS.get(r["run"].status, "") + " " + r["run"].status) if r["run"] else "scheduled"}
                   for r in showcase.lineup(14)], hide_index=True, width="stretch")
 
-    st.markdown("#### Runs")
+    section("Runs")
     with db.session() as s:
         sc_runs = list(s.scalars(select(db.ShowcaseRun).order_by(db.ShowcaseRun.run_date.desc(),
                                                                  db.ShowcaseRun.id.desc()).limit(12)).all())

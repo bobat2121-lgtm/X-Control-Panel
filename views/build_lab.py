@@ -4,7 +4,7 @@ from __future__ import annotations
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import badge, enqueue, esc_md, is_owner, pillar_badge
+from panel.common import badge, card_key, enqueue, esc_md, hero, is_owner, pillar_badge, section
 from xcp import config, db, showcase, xtext
 from xcp.timeutil import fmt_ago, today_ny, utcnow
 
@@ -56,8 +56,8 @@ def _launch_draft(idea_id: int, date_str: str, slot: str) -> None:
 def idea_dialog(idea_id: int) -> None:
     with db.session() as s:
         i = s.get(db.BuildIdea, idea_id)
-    st.markdown(" ".join([pillar_badge(i.pillar), badge(FORMATS.get(i.format, i.format), "#14171A"),
-                          badge(f"effort {i.effort}", "#5B7083"), badge(STATUS_LABELS.get(i.status, i.status), "#8899A6")]),
+    st.markdown(" ".join([pillar_badge(i.pillar), badge(FORMATS.get(i.format, i.format), "ink"),
+                          badge(f"effort {i.effort}", "paper"), badge(STATUS_LABELS.get(i.status, i.status), "paper")]),
                 unsafe_allow_html=True)
     st.markdown(f"### {esc_md(i.title)}")
     if i.hook:
@@ -142,9 +142,19 @@ with db.session() as s:
     ideas = list(s.scalars(select(db.BuildIdea).order_by(db.BuildIdea.created_at.desc())).all())
 
 live = [i for i in ideas if i.status != "archived"]
+_count = {k: sum(1 for i in ideas if i.status == k) for k in STATUSES}
+_lineup = showcase.lineup(14)
+hero("BUILDLAB.EXE", "Ideas worth <em>building</em>.",
+     "Creations the Strategist proposes from what's surfacing and what performs, each with a build prompt you can "
+     "paste into Claude Code or Codex.",
+     stats=[(_count["inbox"], "💡 inbox"), (_count["shortlist"], "⭐ shortlist"),
+            (_count["building"], "🔨 building", _count["building"] > 0), (_count["shipped"], "🚢 shipped")],
+     kicker=f"{len(live)} live ideas · showcase panels Mon / Wed / Fri",
+     ticker=[f"{r['date']:%a %b %d}: {r['title']} ({r['label']} · post {r['post']})" for r in _lineup],
+     icon="🛠")
 
 # --- showcase lineup (fixed: the Digital Credit Report panels, audited before each post)
-st.markdown("#### 🗓 Showcase lineup: your Digital Credit Report panels")
+section("Showcase lineup", "your Digital Credit Report panels")
 st.caption("Mon, Wed and Fri post the panels from digital-credit-report.streamlit.app once the showcase watcher has "
            "audited them (Control Room → Showcase). Build Lab ideas go out in regular slots, or upgrade those panels.")
 RUN_ICONS = {"waiting": "⏳", "blocked": "⚠️", "ready": "🟢", "posted": "✅", "missed": "🔴"}
@@ -157,11 +167,11 @@ for row in showcase.lineup(14):
     c[3].markdown(f"{RUN_ICONS.get(run.status, '')} {run.status}" if run else "🗓 scheduled")
 
 # --- picks
-st.markdown("#### 🏆 This week's picks")
+section("This week's picks", "highest pick score")
 picks = sorted([i for i in live if i.status in ("inbox", "shortlist")], key=pick_score, reverse=True)[:3]
 pc = st.columns(3)
 for col, i in zip(pc, picks):
-    with col.container(border=True):
+    with col.container(border=True, key=card_key("hot", f"pick_{i.id}")):
         st.markdown(f"**{esc_md(i.title)}**")
         st.caption(f"{FORMATS.get(i.format, i.format)} · effort {i.effort} · pick score {pick_score(i)}")
         st.markdown(esc_md(i.hook[:160]))
@@ -212,7 +222,7 @@ if view == "Board":
         items = sorted([i for i in shown if i.status == stt], key=pick_score, reverse=True)
         col.markdown(f"**{STATUS_LABELS[stt]}** · {len(items)}")
         for i in items:
-            with col.container(border=True):
+            with col.container(border=True, key=card_key("card", f"idea_{i.id}")):
                 st.markdown(f"**{esc_md(i.title[:70])}**")
                 meta = f"{FORMATS.get(i.format, i.format)} · {i.effort} · ⚡{pick_score(i)}"
                 if i.showcase_date:
@@ -243,7 +253,7 @@ else:
 
 series = sorted({i.series for i in ideas if i.series})
 if series:
-    st.markdown("#### 🔁 Series")
+    section("Series")
     for name in series:
         members = [i for i in ideas if i.series == name]
         st.markdown(f"**{esc_md(name)}**: " + ", ".join(f"{esc_md(i.title)} ({i.status})" for i in members))

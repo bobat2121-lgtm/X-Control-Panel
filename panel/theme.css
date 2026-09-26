@@ -1,0 +1,258 @@
+/* X Control Panel theme: early-2000s web + Windows XP chrome, rebuilt with a sharp modern grid.
+   Palette: ink (black), tan, paper (white). Olive is for accents only. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Silkscreen:wght@400;700&display=swap');
+
+:root {
+  --ink: #0E0E0C; --ink2: #1C1B17; --ink3: #33312A;
+  --tan: #CDB891; --tan2: #DDCCA9; --tan3: #EEE5D1; --cream: #F7F2E7;
+  --paper: #FFFFFF;
+  --olive: #6B7A26; --olive-hi: #A5B455; --olive-lo: #4B5719; --olive-glow: rgba(107, 122, 38, .45);
+  --mute: #6E6755;
+  --xp: Tahoma, Verdana, "Segoe UI", sans-serif;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Space Grotesk", Inter, sans-serif;
+  --pixel: Silkscreen, Tahoma, monospace;
+  --bevel: linear-gradient(180deg, #FFFDF8 0%, #F2E9D8 45%, #DCCBA8 100%);
+}
+
+/* ---------------------------------------------------------------- page */
+.stApp {
+  background-color: var(--cream);
+  background-image: radial-gradient(rgba(14, 14, 12, .075) 1px, transparent 1.2px);
+  background-size: 14px 14px;
+  color: var(--ink);
+}
+.stApp, .stApp p, .stApp li, .stApp label, .stApp input, .stApp textarea, .stApp button { font-family: var(--sans); }
+[data-testid="stMainBlockContainer"] { max-width: 1240px; padding-top: 4.4rem; padding-bottom: 4rem; }
+.stApp h1, .stApp h2, .stApp h3, .stApp h4 { font-family: var(--display) !important; letter-spacing: -.02em; color: var(--ink); }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: var(--mute) !important; }
+.stMarkdown a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--olive);
+  text-decoration-thickness: 2px; text-underline-offset: 3px; transition: background .12s, color .12s; }
+.stMarkdown a:hover { background: var(--ink); color: var(--tan2); text-decoration-color: var(--olive-hi); }
+::selection { background: var(--olive); color: #fff; }
+
+/* ---------------------------------------------------------------- header / nav: XP taskbar */
+[data-testid="stHeader"] {
+  background: linear-gradient(180deg, #34322B 0%, #151411 52%, #050504 100%);
+  border-bottom: 2px solid var(--olive);
+  box-shadow: 0 2px 0 var(--ink), 0 6px 18px rgba(0, 0, 0, .18);
+}
+a[data-testid="stTopNavLink"] { border: 1px solid transparent; border-radius: 3px; padding: 3px 12px; transition: background .12s; }
+a[data-testid="stTopNavLink"] p, [data-testid="stTopNavSection"] p { font-family: var(--xp) !important; font-weight: 700;
+  font-size: 12.5px; color: var(--tan2) !important; }
+a[data-testid="stTopNavLink"]:hover { background: rgba(221, 204, 169, .12); border-color: rgba(221, 204, 169, .35); }
+a[data-testid="stTopNavLink"][aria-current="page"] {
+  background: var(--bevel); border: 1px solid #000;
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px var(--olive), 0 0 12px var(--olive-glow);
+}
+a[data-testid="stTopNavLink"][aria-current="page"] p { color: var(--ink) !important; }
+[data-testid="stToolbar"] button, [data-testid="stToolbar"] button span { color: var(--tan2) !important; }
+
+/* ---------------------------------------------------------------- cards: XP window, flat modern body, hard shadow */
+[class*="st-key-card"], [class*="st-key-hot"] {
+  background: var(--paper) !important;
+  border: 1px solid var(--ink) !important; border-radius: 3px !important;
+  box-shadow: 3px 3px 0 var(--ink);
+  padding-top: 20px !important; position: relative; overflow: hidden;
+  transition: transform .1s ease, box-shadow .1s ease;
+}
+[class*="st-key-card"]::before, [class*="st-key-hot"]::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 9px;
+  background: linear-gradient(180deg, #EFE4CB, #CDB891); border-bottom: 1px solid var(--ink);
+}
+[class*="st-key-card"]:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+[class*="st-key-card"], [class*="st-key-hot"] { padding: 18px 14px 10px !important; gap: .45rem !important; }
+[class*="st-key-card"] .stButton button, [class*="st-key-hot"] .stButton button,
+[class*="st-key-card"] .stLinkButton a, [class*="st-key-hot"] .stLinkButton a { min-height: 30px !important; padding: 1px 10px !important; }
+[class*="st-key-card"] .stMarkdown p, [class*="st-key-hot"] .stMarkdown p { margin-bottom: .2rem; }
+[class*="st-key-hot"] {
+  border-color: var(--olive) !important;
+  box-shadow: 3px 3px 0 var(--olive-lo);
+  animation: xcp-pulse 2.4s ease-out infinite;
+}
+[class*="st-key-hot"]::before {
+  background: linear-gradient(90deg, var(--olive-lo), var(--olive-hi), var(--olive-lo));
+  background-size: 200% 100%; animation: xcp-sheen 3s linear infinite; border-bottom-color: var(--olive-lo);
+}
+
+/* ---------------------------------------------------------------- buttons: beveled XP, crisp edges */
+.stButton button, .stDownloadButton button, .stLinkButton a, [data-testid="stPopover"] button,
+[data-testid="stFormSubmitButton"] button {
+  background: var(--bevel) !important; color: var(--ink) !important;
+  border: 1px solid var(--ink) !important; border-radius: 3px !important;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 rgba(0, 0, 0, .16), 2px 2px 0 var(--ink);
+  transition: transform .05s, box-shadow .05s, border-color .1s;
+}
+.stButton button p, .stDownloadButton button p, .stLinkButton a p, [data-testid="stPopover"] button p,
+[data-testid="stFormSubmitButton"] button p { font-family: var(--xp) !important; font-weight: 700; font-size: 12.5px;
+  color: inherit !important; }
+.stButton button:hover, .stDownloadButton button:hover, .stLinkButton a:hover, [data-testid="stPopover"] button:hover,
+[data-testid="stFormSubmitButton"] button:hover {
+  border-color: var(--olive) !important;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 rgba(0, 0, 0, .16), 2px 2px 0 var(--olive-lo), 0 0 0 3px var(--olive-glow);
+}
+.stButton button:active, .stDownloadButton button:active, .stLinkButton a:active, [data-testid="stPopover"] button:active {
+  transform: translate(2px, 2px); box-shadow: inset 1px 1px 3px rgba(0, 0, 0, .35);
+}
+.stApp button[kind="primary"], .stApp a[kind="primary"], [data-testid="stBaseButton-primary"],
+[data-testid="stBaseLinkButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
+  background: linear-gradient(180deg, #A5B455 0%, #6B7A26 52%, #55621D 100%) !important;
+  color: #fff !important; border-color: #2C3310 !important; text-shadow: 0 1px 0 rgba(0, 0, 0, .35);
+}
+.stApp button:disabled, .stApp a[disabled] { opacity: .45; filter: grayscale(.4); }
+
+/* ---------------------------------------------------------------- tabs: XP property sheet */
+[data-testid="stTabs"] [role="tablist"] { gap: 3px; border-bottom: 1px solid var(--ink); padding-left: 2px; }
+[data-testid="stTab"] {
+  background: var(--bevel); border: 1px solid var(--ink) !important; border-bottom: none !important;
+  border-radius: 5px 5px 0 0; padding: 6px 16px !important; margin-bottom: -1px; transition: transform .1s;
+}
+[data-testid="stTab"] p { font-family: var(--xp) !important; font-weight: 700; font-size: 13px; color: var(--ink) !important; }
+[data-testid="stTab"][aria-selected="true"] { background: var(--paper); box-shadow: inset 0 3px 0 var(--olive); transform: translateY(-2px); }
+[data-testid="stTab"]:hover:not([aria-selected="true"]) { box-shadow: inset 0 2px 0 var(--tan); }
+
+/* ---------------------------------------------------------------- pills + segmented controls */
+[data-testid="stButtonGroup"] button {
+  background: var(--paper) !important; color: var(--ink) !important;
+  border: 1px solid var(--ink) !important; border-radius: 3px !important; box-shadow: 1px 1px 0 var(--ink);
+}
+[data-testid="stButtonGroup"] button p { font-family: var(--xp) !important; font-weight: 700; font-size: 12px; color: inherit !important; }
+[data-testid="stButtonGroup"] button[aria-pressed="true"], [data-testid="stButtonGroup"] button[aria-checked="true"],
+[data-testid="stButtonGroup"] button[data-selected="true"], [data-testid="stButtonGroup"] button[aria-selected="true"] {
+  background: var(--ink) !important; color: var(--tan2) !important; box-shadow: inset 0 -3px 0 var(--olive), 1px 1px 0 var(--ink);
+}
+
+/* ---------------------------------------------------------------- inputs: sunken XP fields */
+[data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"], [data-testid="stNumberInputContainer"],
+[data-baseweb="select"] > div, [data-testid="stDateInputField"] {
+  background: var(--paper) !important; border: 1px solid var(--ink) !important; border-radius: 2px !important;
+  box-shadow: inset 1px 1px 0 rgba(0, 0, 0, .22), inset -1px -1px 0 #fff;
+}
+[data-testid="stTextArea"] textarea { background: transparent !important; box-shadow: none !important; border: none !important; }
+[data-testid="stTextInputRootElement"]:focus-within, [data-testid="stTextAreaRootElement"]:focus-within,
+[data-baseweb="select"] > div:focus-within { outline: 2px solid var(--olive); outline-offset: 1px; }
+[data-testid="stWidgetLabel"] p { font-family: var(--pixel) !important; font-size: 10px !important; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--mute) !important; }
+
+/* ---------------------------------------------------------------- expanders, alerts, dialogs, metrics */
+[data-testid="stExpander"] details { border: 1px solid var(--ink) !important; border-radius: 2px !important; background: var(--cream); }
+[data-testid="stExpander"] summary { background: var(--bevel); border-bottom: 1px solid rgba(14, 14, 12, .25); }
+[data-testid="stExpander"] summary p { font-family: var(--xp) !important; font-weight: 700; font-size: 12.5px; }
+[data-testid="stAlertContainer"] { background: var(--tan3) !important; border: 1px solid var(--ink); border-left: 6px solid var(--olive);
+  border-radius: 2px !important; color: var(--ink) !important; }
+[data-testid="stAlertContainer"] p { color: var(--ink) !important; }
+[data-testid="stDialog"] { background: rgba(14, 14, 12, .45) !important; }
+[data-testid="stDialog"] > div { border: 1px solid var(--ink) !important; border-radius: 4px !important;
+  box-shadow: 8px 8px 0 var(--ink) !important; background: var(--paper) !important; overflow: hidden; padding-top: 12px; }
+[data-testid="stDialog"] > div::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 10px;
+  background: linear-gradient(90deg, var(--olive-lo), var(--olive-hi), var(--olive-lo)); background-size: 200% 100%;
+  animation: xcp-sheen 3s linear infinite; }
+[data-testid="stMetric"] { background: var(--paper); border: 1px solid var(--ink); border-radius: 2px; padding: 8px 12px;
+  box-shadow: 2px 2px 0 var(--ink); }
+[data-testid="stMetricLabel"] p { font-family: var(--pixel) !important; font-size: 10px !important; text-transform: uppercase; color: var(--mute) !important; }
+[data-testid="stMetricValue"] { font-family: var(--display) !important; font-size: 1.3rem !important; }
+hr { border-color: var(--ink) !important; opacity: .25; }
+
+/* ---------------------------------------------------------------- scrollbars (XP, but flat) */
+::-webkit-scrollbar { width: 14px; height: 14px; }
+::-webkit-scrollbar-track { background: var(--tan3); border-left: 1px solid rgba(14, 14, 12, .3); }
+::-webkit-scrollbar-thumb { background: linear-gradient(90deg, #F4ECDA, #CDB891); border: 1px solid var(--ink); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(90deg, #E9DDBE, var(--olive-hi)); }
+
+/* ---------------------------------------------------------------- badges */
+.xcp-badge { display: inline-block; padding: 2px 7px; margin: 0 4px 2px 0; border: 1px solid var(--ink); border-radius: 2px;
+  font-family: var(--pixel); font-size: 10.5px; line-height: 1.5; letter-spacing: .03em; text-transform: uppercase;
+  vertical-align: middle; white-space: nowrap; }
+.xcp-b-ink { background: var(--ink); color: var(--tan2); }
+.xcp-b-tan { background: var(--tan2); color: var(--ink); }
+.xcp-b-paper { background: var(--paper); color: var(--ink); }
+.xcp-b-olive { background: var(--olive); color: #fff; border-color: var(--olive-lo); }
+.xcp-b-hot { background: var(--olive); color: #fff; border-color: var(--olive-lo); animation: xcp-pulse-sm 1.8s ease-out infinite; }
+.xcp-b-new { background: var(--ink); color: var(--olive-hi); border-color: var(--ink); animation: xcp-blink 1.1s steps(1) infinite; }
+.xcp-muted { color: var(--mute); font-size: .8rem; font-family: var(--xp); }
+.xcp-src { border-left: 3px solid var(--tan); padding: 4px 10px; margin: 4px 0; font-size: .85rem; background: var(--cream); }
+
+/* ---------------------------------------------------------------- section headers */
+.xcp-sec { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 8px; }
+.xcp-sec .bar { width: 10px; height: 20px; background: var(--olive); box-shadow: 2px 2px 0 var(--ink); align-self: center; }
+.xcp-sec h3 { margin: 0 !important; padding: 0 !important; font-size: 1.15rem !important; font-weight: 700; }
+.xcp-sec .note { font-family: var(--pixel); font-size: 10px; color: var(--mute); text-transform: uppercase; letter-spacing: .05em; }
+.xcp-sec::after { content: ""; flex: 1; height: 1px; background: repeating-linear-gradient(90deg, var(--ink) 0 4px, transparent 4px 7px);
+  align-self: center; opacity: .5; }
+
+/* ---------------------------------------------------------------- market tape (XP status bar) */
+.xcp-tape { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; background: var(--tan2); border: 1px solid var(--ink);
+  border-radius: 2px; box-shadow: 2px 2px 0 var(--ink); margin: -6px 0 2px; }
+.xcp-cell { flex: 1 1 auto; min-width: 104px; padding: 4px 10px; background: var(--cream);
+  box-shadow: inset 1px 1px 0 rgba(0, 0, 0, .28), inset -1px -1px 0 #fff; font-family: var(--xp); font-size: 11.5px;
+  white-space: nowrap; }
+.xcp-cell .k { font-family: var(--pixel); font-size: 9px; color: var(--mute); letter-spacing: .05em; margin-right: 6px; }
+.xcp-cell .v { font-family: var(--display); font-weight: 700; font-size: 13.5px; color: var(--ink); }
+.xcp-cell .up { color: var(--olive); font-weight: 700; margin-left: 5px; }
+.xcp-cell .dn { color: var(--ink); font-weight: 700; margin-left: 5px; opacity: .7; }
+.xcp-cell.meta { flex: 3 1 260px; color: var(--mute); white-space: normal; }
+
+/* ---------------------------------------------------------------- hero banner */
+.xcp-hero { margin: 10px 0 18px; border: 1px solid var(--ink); border-radius: 4px 4px 3px 3px; background: var(--ink);
+  box-shadow: 5px 5px 0 var(--ink); overflow: hidden; }
+.xcp-tb { display: flex; justify-content: space-between; align-items: center; height: 28px; padding: 0 6px 0 10px;
+  background: linear-gradient(180deg, #4A473D 0%, #23211C 48%, #0B0B09 52%, #1B1A16 100%);
+  border-bottom: 1px solid #000; }
+.xcp-tb-l { font-family: var(--xp); font-weight: 700; font-size: 12px; color: var(--tan2); text-shadow: 1px 1px 0 #000; letter-spacing: .02em; }
+.xcp-tb-r { display: flex; gap: 3px; }
+.xcp-tb-r i { width: 20px; height: 18px; display: grid; place-items: center; font-style: normal; font-family: var(--xp);
+  font-size: 11px; font-weight: 700; color: var(--ink); background: var(--bevel); border: 1px solid #000; border-radius: 3px;
+  box-shadow: inset 1px 1px 0 #fff; }
+.xcp-tb-r i.x { background: linear-gradient(180deg, #B7C66A, #6B7A26); color: #fff; }
+.xcp-hero-in { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; padding: 22px 24px 20px;
+  background:
+    radial-gradient(900px 260px at 0% 0%, rgba(165, 180, 85, .16), transparent 60%),
+    linear-gradient(180deg, #161512, #0E0E0C);
+  position: relative; }
+.xcp-hero-in::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 3px); }
+.xcp-kicker { font-family: var(--pixel); font-size: 10.5px; color: var(--tan); letter-spacing: .08em; text-transform: uppercase; }
+.xcp-kicker .dot { color: var(--olive-hi); animation: xcp-blink 1.4s steps(1) infinite; }
+.xcp-kicker .caret { display: inline-block; width: 7px; height: 11px; background: var(--olive-hi); margin-left: 4px;
+  vertical-align: -1px; animation: xcp-blink 1s steps(1) infinite; }
+.stApp .xcp-h1 { font-family: var(--display) !important; font-weight: 700; font-size: clamp(1.8rem, 3.6vw, 2.75rem);
+  line-height: 1.02; letter-spacing: -.035em; color: var(--paper) !important; margin: 8px 0 8px !important; padding: 0 !important; }
+.xcp-h1 em { font-style: normal; color: var(--olive-hi); background: linear-gradient(transparent 70%, rgba(165, 180, 85, .25) 70%); }
+.xcp-sub { font-family: var(--sans); font-size: 14px; color: var(--tan2); max-width: 560px; margin: 0; }
+.xcp-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: center; }
+.xcp-stat { background: #171613; border: 1px solid var(--ink3); border-radius: 2px; padding: 10px 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05); }
+.xcp-stat .v { font-family: var(--display); font-weight: 700; font-size: 1.9rem; line-height: 1; color: var(--paper); }
+.xcp-stat .l { font-family: var(--pixel); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--tan); margin-top: 6px; }
+.xcp-stat.hot { border-color: var(--olive); background: linear-gradient(180deg, rgba(107, 122, 38, .28), #171613);
+  animation: xcp-pulse 2.4s ease-out infinite; }
+.xcp-stat.hot .v { color: var(--olive-hi); }
+.xcp-marquee { overflow: hidden; white-space: nowrap; background: var(--tan); border-top: 1px solid #000;
+  font-family: var(--xp); font-weight: 700; font-size: 12px; color: var(--ink); }
+.xcp-track { display: inline-block; padding: 6px 0; animation: xcp-marquee 60s linear infinite; }
+.xcp-marquee:hover .xcp-track { animation-play-state: paused; }
+.xcp-track span { margin: 0 14px; }
+.xcp-track .sep { color: var(--olive-lo); margin: 0; }
+.xcp-track .new { font-family: var(--pixel); font-size: 9px; background: var(--ink); color: var(--olive-hi); padding: 1px 5px;
+  margin: 0 6px 0 0; animation: xcp-blink 1.1s steps(1) infinite; }
+@media (max-width: 760px) {
+  .xcp-tape { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+  .xcp-cell { flex: 0 0 auto; }
+  .xcp-cell.meta { flex: 0 0 auto; white-space: nowrap; }
+  .st-key-tape_refresh { display: none !important; }
+  .xcp-hero-in { grid-template-columns: 1fr; padding: 16px; }
+  [data-testid="stMainBlockContainer"] { padding-top: 3.8rem; }
+}
+
+/* ---------------------------------------------------------------- motion */
+@keyframes xcp-pulse { 0% { box-shadow: 3px 3px 0 var(--olive-lo), 0 0 0 0 var(--olive-glow); }
+                       70% { box-shadow: 3px 3px 0 var(--olive-lo), 0 0 0 9px rgba(107, 122, 38, 0); }
+                       100% { box-shadow: 3px 3px 0 var(--olive-lo), 0 0 0 0 rgba(107, 122, 38, 0); } }
+@keyframes xcp-pulse-sm { 0% { box-shadow: 0 0 0 0 var(--olive-glow); } 70% { box-shadow: 0 0 0 6px rgba(107, 122, 38, 0); }
+                          100% { box-shadow: 0 0 0 0 rgba(107, 122, 38, 0); } }
+@keyframes xcp-sheen { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+@keyframes xcp-blink { 50% { opacity: 0; } }
+@keyframes xcp-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
