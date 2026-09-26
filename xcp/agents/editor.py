@@ -50,8 +50,45 @@ POSITION_RE = re.compile(r"\b(?:my|i|i'm|i've)\b[^.\n]{0,50}?\b(?:portfolio|posi
                          r"avg|cost basis|bought|sold|holdings?|own)\b[^.\n]{0,40}?(?<![A-Za-z])\$?\d[\d,.]*%?", re.I)
 
 
-def check_variant(parts: list[str], snapshot_flat: dict, source_texts: list[str], style: str = "") -> list[str]:
+AI_TELLS = ("the tell", "here's the thing", "here is the thing", "let that sink in", "quietly", "buckle up", "delve",
+            "game-changer", "game changer", "in short,", "overall,", "make no mistake", "it's worth noting",
+            "the real story", "not just a")
+NOT_JUST_RE = re.compile(r"\b(?:it's|this is|that's|isn't)\s+not\s+(?:just\s+)?[^.\n]{1,40}[,;]\s*(?:it's|it is)\b", re.I)
+
+
+def robot_flags(parts: list[str]) -> list[str]:
+    """Things that make a post read like an AI wrote it (voice v2 rules)."""
     flags: list[str] = []
+    text = "\n".join(parts)
+    if "—" in text:
+        flags.append("🤖 Em dash: use a period, comma or '...' instead")
+    lowered = text.lower()
+    for phrase in AI_TELLS:
+        if phrase in lowered:
+            flags.append(f"🤖 AI-sounding phrase: '{phrase.strip(',')}'")
+    if NOT_JUST_RE.search(text):
+        flags.append("🤖 'It's not X, it's Y' construction")
+    if len(parts) == 1 and len(text) <= 500:
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if len(lines) >= 3:
+            lens = [len(ln) for ln in lines]
+            same_shape = max(lens) <= 1.4 * min(lens) and all(ln.endswith(".") for ln in lines)
+            if same_shape:
+                flags.append("🤖 Every line has the same length and shape: vary the rhythm")
+        if "tl;dr" in lowered or "tldr" in lowered:
+            flags.append("🤖 TL;DR on a short post")
+    return flags
+
+
+def check_variant(parts: list[str], snapshot_flat: dict, source_texts: list[str], style: str = "",
+                  robot: bool | None = None) -> list[str]:
+    flags: list[str] = []
+    if robot is None:
+        from xcp import config
+
+        robot = bool(config.settings().get("voice", {}).get("robot_check", False))
+    if robot:
+        flags += robot_flags(parts)
     text = "\n".join(parts)
     if style in ("quote", "reply"):  # guideline: quotes and replies must add something of their own
         own = xtext.URL_RE.sub("", MENTION_RE.sub("", text)).strip()

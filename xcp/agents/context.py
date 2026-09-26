@@ -13,22 +13,36 @@ from xcp.sources import market
 from xcp.timeutil import fmt_ago, today_ny, utcnow
 
 
-def style_block(lane: str | None = None, n: int = 12, seed: str = "") -> str:
-    """Your best posts first, then a varied, mostly-short sample of craft patterns from the style library."""
+ANALYTICAL_HANDLES = ("RoaringRagnar", "PunterJeff", "ZynxBTC")
+
+
+def style_block(lane: str | None = None, n: int = 12, seed: str = "", mode: str | None = None) -> str:
+    """Your best posts first, then a varied, mostly-short sample of craft patterns from the style library.
+
+    mode "v2" (the human-voice mode): more of your own posts, and only the admired accounts' reasoning moves,
+    without their templates, which pull drafts toward the same tidy shape every time."""
+    mode = mode or config.settings().get("voice", {}).get("style_mode", "classic")
+    if mode == "v2":
+        n = min(n, 5)
     with db.session() as s:
         rows = list(s.scalars(select(db.StyleExample).where(db.StyleExample.active.is_(True))).all())
     rng = random.Random(seed or today_ny().isoformat())
     # Your posts: favorites (strength 8+) always, then a rotating sample of the rest so your whole voice gets used.
     all_mine = [r for r in rows if r.source == "mine"]
-    favorites = sorted([r for r in all_mine if r.strength >= 8], key=lambda r: -r.strength)[:6]
+    n_mine = 16 if mode == "v2" else 10
+    favorites = sorted([r for r in all_mine if r.strength >= 8], key=lambda r: -r.strength)[:8 if mode == "v2" else 6]
     others = [r for r in all_mine if r.strength < 8]
     rng.shuffle(others)
     others.sort(key=lambda r: -r.strength)  # stable sort keeps the shuffle within each strength level
-    mine = favorites + others[:max(0, 10 - len(favorites))]
+    mine = favorites + others[:max(0, n_mine - len(favorites))]
     admired = [r for r in rows if r.source == "admired"]  # reposts are never voice or craft
+
+    analytical = {"quick_analysis", "long_analysis", "data_callout", "contrarian"}
 
     def rank(r):  # strength, lane fit, a little randomness for variety between runs
         fit = 1.5 if lane and config.pillar_lane(r.pillar) == lane else 0.0
+        if mode == "v2":  # lean on the reasoning of the analytical accounts
+            fit += (1.5 if r.format in analytical else 0.0) + (1.0 if r.handle in ANALYTICAL_HANDLES else 0.0)
         return r.strength + fit + rng.random() * 2.5
 
     picked, per_format, longs = [], {}, 0
@@ -45,7 +59,11 @@ def style_block(lane: str | None = None, n: int = 12, seed: str = "") -> str:
     if mine:
         lines.append("YOUR OWN BEST POSTS (the voice to match; these win any conflict):")
         lines += [f"- {'(reply) ' if r.hook_type == 'reply' else ''}{' '.join(r.text.split())[:500]}" for r in mine]
-    if picked:
+    if picked and mode == "v2":
+        lines.append("REASONING MOVES borrowed from accounts you respect (how to think a post through; never their "
+                     "cadence, wording, catchphrases or series; it must still sound like you):")
+        lines += [f"- @{r.handle}: {r.pattern}" for r in picked]
+    elif picked:
         lines.append("CRAFT PATTERNS learned from accounts you admire (borrow structure only; never reuse their "
                      "wording, facts or jokes):")
         for r in picked:

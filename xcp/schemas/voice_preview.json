@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["posts"],
+  "properties": {
+    "posts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "parts"],
+        "properties": {
+          "id": {"type": "string"},
+          "parts": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

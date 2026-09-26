@@ -23,7 +23,7 @@ REWRITE_PRESETS = {
     "single": "Condense into one single post (not a thread).",
 }
 LLM_KINDS = {"rewrite", "draft_from_url", "draft_from_text", "draft_from_story", "regenerate", "idea_from_story",
-             "idea_remix", "ideas_generate", "style_sparks", "showcase_captions"}
+             "idea_remix", "ideas_generate", "style_sparks", "showcase_captions", "voice_preview"}
 
 
 def pending(kind: str | None = None) -> list[db.Request]:
@@ -354,4 +354,11 @@ HANDLERS = {
     "idea_from_story": h_idea_from_story,
     "idea_remix": h_idea_remix,
     "showcase_captions": h_showcase_captions,
+    "voice_preview": lambda p: h_voice_preview(p),
 }
+
+
+def h_voice_preview(p: dict) -> dict:
+    from xcp import voice
+
+    return voice.preview(p.get("which", "draft"))

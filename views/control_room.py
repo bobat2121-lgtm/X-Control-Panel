@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from panel.common import enqueue, is_owner
 from xcp import config, db, gh, notify, showcase
+from xcp import voice as voice_mod
 from xcp.agents.collect import x_reads_this_month, x_reads_today
 from xcp.config import env
 from xcp.sources import calendar_feeds, issuers
@@ -320,6 +321,48 @@ with t_voice:
     if st.button("💾 Save voice", type="primary"):
         config.save("voice", voice)
         st.toast("Voice saved", icon="🗣")
+
+    st.divider()
+    st.markdown("**🧪 Voice draft (not live)** · edit a new voice, preview it on the same example briefs every "
+                "time, then make it live. Previews never reach the Feed.")
+    d_text = st.text_area("Voice draft", voice_mod.draft() or config.get("voice"), height=480,
+                          label_visibility="collapsed", key="voice_draft_ta")
+
+    def _preview_draft() -> None:
+        voice_mod.save_draft(st.session_state.get("voice_draft_ta", ""))
+        enqueue("voice_preview", {"which": "draft"})
+
+    c = st.columns([1, 1.3, 1.6])
+    if c[0].button("💾 Save draft", width="stretch"):
+        voice_mod.save_draft(d_text)
+        st.toast("Draft saved (not live)", icon="🧪")
+    c[1].button("🧪 Preview the draft", on_click=_preview_draft, width="stretch",
+                help=f"Writes the {len(voice_mod.briefs())} example posts with the draft on your ChatGPT (about 2-4 "
+                     "minutes). Nothing is posted or added to the Feed.")
+    with c[2].popover("🚀 Make the draft live", width="stretch"):
+        st.caption("Replaces the live voice (kept in history below) and turns on the v2 style mode and the "
+                   "robot check for every draft.")
+        if st.button("Yes, make it live", type="primary", key="voice_live"):
+            voice_mod.save_draft(d_text)
+            voice_mod.make_live()
+            st.toast("The draft is now the live voice", icon="🚀")
+            st.rerun()
+    prev = db.kv_get("voice:preview:draft")
+    if prev:
+        st.caption(f"Latest preview of the draft · {fmt_ny(parse_iso(prev['at']))}")
+        for r in prev["results"]:
+            with st.container(border=True):
+                st.markdown(f"**{r['id']} · {r['title']}** · <span class='xcp-muted'>{r['kind']}</span>",
+                            unsafe_allow_html=True)
+                st.code(r["text"] or "(nothing written)", language=None, wrap_lines=True)
+                for f in r["flags"]:
+                    st.caption(f"⚠️ {f}")
+    hist = voice_mod.history()
+    if hist:
+        with st.expander(f"Earlier live versions ({len(hist)})"):
+            for h in reversed(hist):
+                st.caption(f"Replaced {fmt_ny(parse_iso(h['replaced_at']))}")
+                st.code(h["text"][:6000], language=None, wrap_lines=True)
 
 # ------------------------------------------------------------------ market inputs
 with t_market:

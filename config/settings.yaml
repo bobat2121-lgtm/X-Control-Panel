@@ -124,6 +124,13 @@ market:
   sata_annual_rate_pct: 13.0     # SATA dividend rate (13.00% per May 2026 8-K; verify)
   rates_as_of: "2026-05"
 
+# Voice mode. "classic" = the original style mix. "v2" = more of your own posts and only the admired accounts'
+# reasoning (no templates), plus the robot check (em dashes, AI phrases, same-shape lines). Control Room →
+# Voice & rules → "Make the draft live" switches both on.
+voice:
+  style_mode: classic
+  robot_check: false
+
 llm:
   backend: codex      # codex (your ChatGPT account via Codex CLI) | mock (offline testing)
   codex_model: ""     # blank = Codex default model (e.g. gpt-6-sol, gpt-6-astra, gpt-6-luna)
