@@ -101,7 +101,7 @@ def run_slot(slot: str) -> dict:
     prompt = llm.render_prompt(
         "slot", handle=context.handle(), slot_label=spec.get("label", slot), post_at=spec.get("post_at", ""),
         weekday=dayname(d).title(), date=date_str, lane=lane, slot_brief=SLOT_BRIEFS.get(slot, ""),
-        voice=config.get("voice"), style=context.style_block(lane, seed=f"{date_str}-{slot}"),
+        voice=config.get("voice"), guidelines=config.get("guidelines"), style=context.style_block(lane, seed=f"{date_str}-{slot}"),
         mix=context.mix_block(), snapshot=snap_text, snapshot_time=snap_time,
         calendar=context.calendar_block(), recent=context.recent_block(),
         items=context.items_block(items, int(limits.get("item_text_chars", 600))),
@@ -131,7 +131,8 @@ def run_slot(slot: str) -> dict:
             story = next((x for x in out.get("stories", []) if x["key"] == dr["story_key"]), None)
             flags = []
             for i, v in enumerate(dr.get("variants", [])):
-                for f in editor.check_variant(v["parts"], flat, [x.text for x in insp_items] or source_texts_all):
+                for f in editor.check_variant(v["parts"], flat, [x.text for x in insp_items] or source_texts_all,
+                                                  v.get("style", "")):
                     flags.append(f"{v.get('label') or 'ABC'[i]}: {f}")
             draft = db.Draft(slot=slot, slot_date=date_str, kind="regular", story_id=story_ids.get(dr["story_key"]),
                              lane=config.pillar_lane(dr["pillar"]), pillar=dr["pillar"], tone=dr["tone"],
@@ -153,7 +154,8 @@ def run_slot(slot: str) -> dict:
                 continue
             draft = db.Draft(slot=slot, slot_date=date_str, kind="reply", lane=it.lane, pillar=it.pillar,
                              tone="timely", title=rp.get("why", "")[:200], source_item_id=it.id,
-                             inspiration=[_insp(it)], score=it.score)
+                             inspiration=[_insp(it)], score=it.score,
+                             editor_flags=[f"A: {f}" for f in editor.check_variant([rp["reply"]], flat, [it.text], "reply")])
             s.add(draft)
             s.flush()
             db.add_variant_version(s, draft.id, "A", [rp["reply"]], "reply", "ai")

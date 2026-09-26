@@ -44,9 +44,16 @@ def _matches(value: float, known: list[float]) -> bool:
     return False
 
 
-def check_variant(parts: list[str], snapshot_flat: dict, source_texts: list[str]) -> list[str]:
+MENTION_RE = re.compile(r"[@$]\w+")
+
+
+def check_variant(parts: list[str], snapshot_flat: dict, source_texts: list[str], style: str = "") -> list[str]:
     flags: list[str] = []
     text = "\n".join(parts)
+    if style in ("quote", "reply"):  # guideline: quotes and replies must add something of their own
+        own = xtext.URL_RE.sub("", MENTION_RE.sub("", text)).strip()
+        if xtext.weighted_len(own) < 50:
+            flags.append("Quote/reply adds little of its own: add an analytical point, a joke, or an observation")
     known = _known_values(snapshot_flat, source_texts)
     for raw, val in _numbers_in(text):
         if val <= 31 and "%" not in raw and "$" not in raw:  # counts, days, list numbers

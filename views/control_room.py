@@ -22,7 +22,7 @@ if not is_owner():
 
 settings = config.settings()
 t_agents, t_settings, t_watch, t_voice, t_style, t_market, t_cal = st.tabs(
-    ["🛰 Agents", "⚙️ Settings", "👀 Watchlist", "🗣 Voice", "📚 Style library", "💹 Market inputs", "📅 Calendar"])
+    ["🛰 Agents", "⚙️ Settings", "👀 Watchlist", "🗣 Voice & rules", "📚 Style library", "💹 Market inputs", "📅 Calendar"])
 
 # ------------------------------------------------------------------ agents
 with t_agents:
@@ -184,8 +184,15 @@ with t_watch:
 
 # ------------------------------------------------------------------ voice
 with t_voice:
-    st.caption("The single biggest lever on draft quality. Paste your best posts, phrases you never use, "
-               "and what you believe.")
+    st.markdown("**Posting guidelines** · every writer and rewrite follows these (guiding, not binding)")
+    guidelines = st.text_area("Posting guidelines", config.get("guidelines"), height=230,
+                              label_visibility="collapsed", key="guidelines_ta")
+    if st.button("💾 Save guidelines", type="primary"):
+        config.save("guidelines", guidelines)
+        st.toast("Guidelines saved", icon="📏")
+    st.divider()
+    st.markdown("**Voice profile** · the single biggest lever on draft quality. Paste your best posts, phrases you "
+                "never use, and what you believe.")
     voice = st.text_area("Voice profile", config.get("voice"), height=480, label_visibility="collapsed")
     if st.button("💾 Save voice", type="primary"):
         config.save("voice", voice)

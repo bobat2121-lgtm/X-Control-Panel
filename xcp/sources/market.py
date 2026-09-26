@@ -199,6 +199,58 @@ def history(ticker: str, period: str = "3mo") -> pd.Series:
         return pd.Series(dtype=float)
 
 
+# ------------------------------------------------------------------ trends (for analytical posts)
+
+TREND_SYMBOLS = ["BTC-USD", "MSTR", "STRC", "SATA", "ASST", "IBIT", "^GSPC", "GC=F"]
+PAR_SYMBOLS = ("STRC", "SATA")
+
+
+def _pct_since(s: pd.Series, days: int):
+    cutoff = s.index[-1] - pd.Timedelta(days=days)
+    prior = s[s.index <= cutoff]
+    if prior.empty:
+        return None
+    return round((float(s.iloc[-1]) / float(prior.iloc[-1]) - 1) * 100, 1)
+
+
+def trends() -> dict:
+    """7/30/90-day changes, plus par statistics for the $100-par preferreds."""
+    try:
+        import yfinance as yf
+
+        df = yf.download(TREND_SYMBOLS + ["^TNX"], period="6mo", interval="1d", group_by="ticker",
+                         auto_adjust=False, progress=False, threads=True)
+    except Exception as e:
+        log.warning("trend download failed: %s", e)
+        return {}
+    out: dict[str, dict] = {}
+    for sym in TREND_SYMBOLS:
+        try:
+            s = df[sym]["Close"].dropna()
+        except (KeyError, TypeError):
+            continue
+        if len(s) < 15:
+            continue
+        name = "BTC" if sym == "BTC-USD" else sym.lstrip("^").replace("=F", "")
+        row = {f"chg_{d}d_pct": _pct_since(s, d) for d in (7, 30, 90)}
+        if sym in PAR_SYMBOLS:
+            last30 = s[s.index >= s.index[-1] - pd.Timedelta(days=30)]
+            row["days_within_1usd_of_par_30d"] = int(((last30 - 100).abs() <= 1.0).sum())
+            row["trading_days_30d"] = int(len(last30))
+            row["low_30d"], row["high_30d"] = round(float(last30.min()), 2), round(float(last30.max()), 2)
+            row["low_90d"] = round(float(s[s.index >= s.index[-1] - pd.Timedelta(days=90)].min()), 2)
+        out[name] = {k: v for k, v in row.items() if v is not None}
+    try:  # 10Y yield: change in basis points, not percent
+        tnx = df["^TNX"]["Close"].dropna()
+        for d in (30, 90):
+            prior = tnx[tnx.index <= tnx.index[-1] - pd.Timedelta(days=d)]
+            if not prior.empty:
+                out.setdefault("US10Y", {})[f"chg_{d}d_bps"] = round((float(tnx.iloc[-1]) - float(prior.iloc[-1])) * 100)
+    except (KeyError, TypeError):
+        pass
+    return out
+
+
 # ------------------------------------------------------------------ snapshot
 
 def take_snapshot(save: bool = True) -> dict:
@@ -208,6 +260,7 @@ def take_snapshot(save: bool = True) -> dict:
     data["btc"] = btc()
     data["equities"] = equities(list(m.get("tickers", [])))
     data["onchain"] = onchain()
+    data["trends"] = trends()
     data["sentiment"] = {"fear_greed": fear_greed()}
     data["macro"] = fred()
     for sym, key in (("^TNX", "us10y_yahoo"), ("DX-Y.NYB", "dxy")):

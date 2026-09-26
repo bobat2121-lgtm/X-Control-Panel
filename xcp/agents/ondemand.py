@@ -96,7 +96,7 @@ def _run_rewrites(reqs: list[db.Request], stats: dict) -> None:
                             for rid, m in meta.items()]}
 
     try:
-        prompt = llm.render_prompt("rewrite", handle=context.handle(), voice=config.get("voice"),
+        prompt = llm.render_prompt("rewrite", handle=context.handle(), voice=config.get("voice"), guidelines=config.get("guidelines"),
                                    snapshot=snap_text, snapshot_time=snap_time, requests="\n".join(blocks))
         out = llm.run_json(prompt, "rewrite", mock=mock)
     except Exception as e:
@@ -117,7 +117,7 @@ def _run_rewrites(reqs: list[db.Request], stats: dict) -> None:
             draft = s.get(db.Draft, d.id)
             flags = [f for f in (draft.editor_flags or []) if not f.startswith(f"{v.label}:")]
             flags += [f"{v.label}: {f}" for f in editor.check_variant(parts, flat, [i.get("text", "") for i in
-                                                                                     d.inspiration or []])]
+                                                                                     d.inspiration or []], style)]
             draft.editor_flags = flags
             s.commit()
             _finish(rid, "done", {"variant_label": v.label})
@@ -136,7 +136,7 @@ def _single_draft(source_text: str, angle: str, n_variants: int = 3) -> tuple[di
                              for i in range(n_variants)],
                 "numbers_used": [], "chart_hint": "none"}
 
-    prompt = llm.render_prompt("single_draft", handle=context.handle(), voice=config.get("voice"),
+    prompt = llm.render_prompt("single_draft", handle=context.handle(), voice=config.get("voice"), guidelines=config.get("guidelines"),
                                style=context.style_block(None, n=8), snapshot=snap_text,
                                snapshot_time=snap_time, source=source_text,
                                angle=angle or "(none)", n_variants=str(n_variants))
@@ -161,7 +161,8 @@ def _save_single(out: dict, flat: dict, slot: str, insp: list[dict], source_item
         for i, v in enumerate(out.get("variants", [])[:4]):
             label = (v.get("label") or "ABCD"[i])[:1].upper()
             db.add_variant_version(s, draft.id, label, v["parts"], v.get("style", "analyst"), "ai")
-            flags += [f"{label}: {f}" for f in editor.check_variant(v["parts"], flat, [x.get("text", "") for x in insp])]
+            flags += [f"{label}: {f}" for f in editor.check_variant(v["parts"], flat, [x.get("text", "") for x in insp],
+                                                                   v.get("style", ""))]
         draft.editor_flags = flags
         s.commit()
         return draft.id
@@ -264,7 +265,7 @@ def h_style_sparks(p: dict) -> dict:
                             "format": f, "text": f"[mock {f}] STRC keeps hugging par.", "numbers_used": []}
                            for f in fmts[:n]]}
 
-    prompt = llm.render_prompt("sparks", handle=context.handle(), voice=config.get("voice"),
+    prompt = llm.render_prompt("sparks", handle=context.handle(), voice=config.get("voice"), guidelines=config.get("guidelines"),
                                style=context.style_block(None, n=16, seed=utcnow().isoformat()),
                                stories=stories_text, snapshot=snap_text, snapshot_time=snap_time,
                                focus=p.get("focus", "") or "(none)", n=str(n))

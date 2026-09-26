@@ -31,8 +31,11 @@ def _yaml(name: str) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def _voice_default() -> str:
-    path = CONFIG_DIR / "voice.md"
+TEXT_DOCS = {"voice": "voice.md", "guidelines": "guidelines.md"}
+
+
+def _text_default(name: str) -> str:
+    path = CONFIG_DIR / TEXT_DOCS[name]
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
@@ -46,12 +49,12 @@ def deep_merge(base, override):
 
 
 def get(name: str):
-    """settings | pillars | watchlist -> dict ; voice -> str"""
+    """settings | pillars | watchlist -> dict ; voice | guidelines -> str"""
     from xcp import db
 
     override = db.kv_get(f"config:{name}")
-    if name == "voice":
-        return override if isinstance(override, str) and override.strip() else _voice_default()
+    if name in TEXT_DOCS:
+        return override if isinstance(override, str) and override.strip() else _text_default(name)
     default = _yaml(name)
     if name == "watchlist":  # lists replace wholesale
         return override if isinstance(override, dict) else default
