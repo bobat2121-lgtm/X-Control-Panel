@@ -18,6 +18,7 @@ class VoiceRules(unittest.TestCase):
                      "My average entry on $MSTR is $117."):
             self.assertTrue(any("write XX" in f for f in flags(text)), text)
         for text in ("My portfolio is XX% $MSTR. LONG", "Strategy bought 846,000 BTC worth of conviction.",
+                     "I sold my car in February 2026 for BTC, MSTR and ASST.",
                      "My best guess: another big week for $STRC."):
             self.assertFalse(any("write XX" in f for f in flags(text)), text)
 

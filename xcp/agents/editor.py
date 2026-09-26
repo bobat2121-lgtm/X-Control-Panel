@@ -113,6 +113,9 @@ def check_variant(parts: list[str], snapshot_flat: dict, source_texts: list[str]
         if phrase in lowered:
             flags.append(f"Avoid: '{phrase}'")
     for m in POSITION_RE.finditer(text):  # the owner fills in their own position sizes
+        number = re.search(r"\d[\d,.]*%?$", m.group(0))
+        if number and re.fullmatch(r"(19|20)\d\d", number.group(0)):  # "sold my car in February 2026" is a date
+            continue
         flags.append(f"Your position size is stated ('{m.group(0).strip()[:60]}'): write XX instead")
     if xtext.HASHTAG_RE.search(text):
         flags.append("Contains hashtags")

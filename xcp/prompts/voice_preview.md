@@ -16,6 +16,10 @@ Each brief says what kind of post it is, the angle, and the only facts you may u
 
 ## Before you answer, reread every post and fix it if it fails any of these
 - Would you actually say this out loud to a friend who follows the market? If it sounds like a research note, a press release or a LinkedIn post, rewrite it.
+- A short post is under 280 characters, full stop. Go long only when the brief says long.
+- One or two numbers per line. Never cram a list of figures into one sentence; pick the ones that carry the point.
+- Across this batch, no two posts share an opener or a closing move (not "watching" twice, not the same question shape twice).
+- A joke needs one specific, concrete image (a job, a place, an object, a game). If it would need explaining, cut it.
 - Did you react or give your opinion where a real person would?
 - Do the lines vary in length and shape? Does it end the way you'd end it (a question, a feeling, a jab, or just stopping) instead of on a neat slogan?
 - No em dashes. None of: "the tell", "here's the thing", "let that sink in", "it's not just X, it's Y", "quietly", "buckle up", "delve", "game-changer". No hashtags. No single price targets or buy/sell calls (scenario math is fine).
