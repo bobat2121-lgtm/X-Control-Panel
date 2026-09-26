@@ -65,6 +65,12 @@ limits:
   item_text_chars: 600
   include_watchlist_replies: false
 
+# Style refresh (Control Room -> Run now -> 📚 Style refresh). X reads ≈ $0.005 each.
+style:
+  posts_per_account: 100      # latest original posts per watchlist account
+  own_posts_max: 1000         # cap on your own posts pulled into your voice library
+  include_own_replies: false  # true = your replies count toward your voice too
+
 market:
   tickers: [MSTR, STRC, STRF, STRK, STRD, ASST, SATA, IBIT, "^TNX", "DX-Y.NYB", "^GSPC", "GC=F"]
   # Manual inputs used for derived metrics. Update in Control Room -> Market inputs.

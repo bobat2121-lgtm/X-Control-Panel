@@ -17,9 +17,15 @@ def style_block(lane: str | None = None, n: int = 12, seed: str = "") -> str:
     """Your best posts first, then a varied, mostly-short sample of craft patterns from the style library."""
     with db.session() as s:
         rows = list(s.scalars(select(db.StyleExample).where(db.StyleExample.active.is_(True))).all())
-    mine = sorted([r for r in rows if r.source == "mine"], key=lambda r: -r.strength)[:8]
-    admired = [r for r in rows if r.source != "mine"]
     rng = random.Random(seed or today_ny().isoformat())
+    # Your posts: favorites (strength 8+) always, then a rotating sample of the rest so your whole voice gets used.
+    all_mine = [r for r in rows if r.source == "mine"]
+    favorites = sorted([r for r in all_mine if r.strength >= 8], key=lambda r: -r.strength)[:6]
+    others = [r for r in all_mine if r.strength < 8]
+    rng.shuffle(others)
+    others.sort(key=lambda r: -r.strength)  # stable sort keeps the shuffle within each strength level
+    mine = favorites + others[:max(0, 10 - len(favorites))]
+    admired = [r for r in rows if r.source != "mine"]
 
     def rank(r):  # strength, lane fit, a little randomness for variety between runs
         fit = 1.5 if lane and config.pillar_lane(r.pillar) == lane else 0.0

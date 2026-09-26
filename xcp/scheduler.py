@@ -102,6 +102,10 @@ def _dispatch(name: str) -> dict:
         return out
     if name == "weekly":
         return strategist.weekly()
+    if name == "style_refresh":
+        from xcp.agents import style
+
+        return style.refresh()
     if name == "requests":
         return ondemand.process_all()
     if name == "snapshot":

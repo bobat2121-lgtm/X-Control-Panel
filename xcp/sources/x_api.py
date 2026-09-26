@@ -111,6 +111,23 @@ class XClient:
         return got
 
 
+    def user_posts_all(self, user_id: str, max_posts: int = 100, exclude: str | None = "retweets,replies") -> list[dict]:
+        """Most recent posts from one account, paginated (X serves up to ~3,200 per timeline)."""
+        posts: list[dict] = []
+        token = None
+        while len(posts) < max_posts:
+            payload = self._get(f"/users/{user_id}/tweets", max_results=min(100, max(5, max_posts - len(posts))),
+                                exclude=exclude or None, pagination_token=token,
+                                **{"tweet.fields": TWEET_FIELDS, "expansions": "author_id", "user.fields": USER_FIELDS})
+            got = self._normalize(payload)
+            self.reads += len(got)
+            posts.extend(got)
+            token = (payload.get("meta") or {}).get("next_token")
+            if not token or not got:
+                break
+        return posts[:max_posts]
+
+
 def watchlist_queries(handles: list[str], include_replies: bool = False, max_len: int = 480) -> list[str]:
     """Chunk handles into 'from:a OR from:b' queries under X's query length limit."""
     suffix = " -is:retweet" + ("" if include_replies else " -is:reply")

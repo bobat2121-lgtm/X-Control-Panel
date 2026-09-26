@@ -14,6 +14,13 @@ from xcp.config import env
 from xcp.timeutil import fmt_ny, today_ny
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+CODEX_MODELS = {  # from OpenAI's Codex model list (Sept 2026)
+    "": "Codex default for your plan (recommended)",
+    "gpt-6-sol": "gpt-6-sol: strong all-rounder",
+    "gpt-6-astra": "gpt-6-astra: complex research workflows",
+    "gpt-6-luna": "gpt-6-luna: fastest, lightest on usage",
+    "gpt-5.5": "gpt-5.5: legacy, retires Oct 14, 2026",
+}
 LANES = ["btc", "ai"]
 
 if not is_owner():
@@ -47,9 +54,10 @@ with t_agents:
                f"(≈ \\${x_reads_today() * 0.005:.2f} at \\$0.005/post)")
 
     st.markdown("#### Run now")
-    jobs = list(settings["slots"]) + ["nightly", "weekly", "snapshot"]
+    jobs = list(settings["slots"]) + ["nightly", "weekly", "snapshot", "style_refresh"]
     labels = {**{k: v.get("label", k) for k, v in settings["slots"].items()},
-              "nightly": "🌙 Nightly (metrics + ideas)", "weekly": "📅 Weekly review", "snapshot": "💹 Market snapshot"}
+              "nightly": "🌙 Nightly (metrics + ideas)", "weekly": "📅 Weekly review", "snapshot": "💹 Market snapshot",
+              "style_refresh": "📚 Style refresh"}
     cols = st.columns(len(jobs))
     for col, j in zip(cols, jobs):
         col.button(labels[j], key=f"run_{j}", width="stretch", on_click=enqueue, args=("run_job", {"job": j}))
@@ -126,7 +134,12 @@ with t_settings:
     c = st.columns(2)
     new["llm"]["backend"] = c[0].selectbox("LLM backend", ["codex", "mock"],
                                            index=["codex", "mock"].index(settings["llm"].get("backend", "codex")))
-    new["llm"]["codex_model"] = c[1].text_input("Codex model (blank = default)", settings["llm"].get("codex_model", ""))
+    cur_model = settings["llm"].get("codex_model", "") or ""
+    model_opts = list(CODEX_MODELS) + ([cur_model] if cur_model and cur_model not in CODEX_MODELS else [])
+    new["llm"]["codex_model"] = c[1].selectbox(
+        "Codex model (writes every draft)", model_opts, index=model_opts.index(cur_model),
+        format_func=lambda m: CODEX_MODELS.get(m, f"{m} (custom)"),
+        help="Uses your ChatGPT plan's Codex limits. Heavier models use more of your plan's allowance.")
 
     b = st.columns([1, 1, 4])
     if b[0].button("💾 Save settings", type="primary"):
@@ -260,6 +273,11 @@ with t_cal:
 FORMATS = ["short_observation", "quick_analysis", "long_analysis", "thread", "humor_meme", "contrarian",
            "data_callout", "news_reaction", "question_hook", "chart_callout"]
 with t_style:
+    sc = settings.get("style", {})
+    st.info(f"📚 **Style refresh** (Agents tab → Run now) pulls the latest {sc.get('posts_per_account', 100)} posts from "
+            f"each watchlist account plus up to {sc.get('own_posts_max', 1000)} of yours via the X API "
+            "(≈ \\$0.005/post), then extracts new patterns. Mark favorites by setting strength 8+; "
+            f"favorites are always shown to the writer, and the rest rotate.", icon="📚")
     with db.session() as s:
         rows = list(s.scalars(select(db.StyleExample).order_by(db.StyleExample.source.desc(),
                                                                 db.StyleExample.strength.desc())).all())

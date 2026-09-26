@@ -48,8 +48,29 @@ def log_post(draft_id: int | None, url: str, text: str, pillar: str, tone: str |
         row.posted_at = row.posted_at or utcnow()
         row.pillar, row.lane = pillar, config.pillar_lane(pillar)
         row.tone, row.style, row.kind, row.source = tone, style, kind, "panel"
+        add_my_post(s, url, text, pillar)
         s.commit()
     return tid
+
+
+def add_my_post(s, url: str, text: str, pillar: str = "bitcoin", metrics: dict | None = None,
+                fmt: str = "short_observation") -> bool:
+    """Every post you publish joins your voice library (neutral strength; you pick favorites in Control Room)."""
+    text = (text or "").strip()
+    if not text:
+        return False
+    q = select(db.StyleExample).where(db.StyleExample.source == "mine")
+    q = q.where(db.StyleExample.url == url) if url else q.where(db.StyleExample.text == text)
+    existing = s.scalars(q).first()
+    if existing:
+        if metrics:
+            existing.metrics = metrics
+        return False
+    s.add(db.StyleExample(source="mine", handle=(config.settings().get("account", {}).get("handle") or ""),
+                          url=url or "", text=text, pillar=pillar or "bitcoin", format=fmt,
+                          length="long" if len(text) > 600 else ("medium" if len(text) > 280 else "short"),
+                          metrics=metrics or {}, strength=5, active=True))
+    return True
 
 
 def _attribute(s, text: str) -> db.Draft | None:
@@ -105,5 +126,7 @@ def import_own_posts(days: int = 8) -> dict:
                     "quotes": m.get("quote_count", 0), "bookmarks": m.get("bookmark_count", 0)}
             row.latest_metrics = snap
             s.add(db.PostMetric(post_id=p["id"], **snap))
+            add_my_post(s, p["url"], p["text"], row.pillar, {"likes": snap["likes"], "views": snap["impressions"],
+                                                            "reposts": snap["reposts"]})
         s.commit()
     return {"posts_seen": len(posts), "posts_new": new, "x_reads": client.reads}

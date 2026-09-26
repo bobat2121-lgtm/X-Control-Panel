@@ -80,7 +80,7 @@ def upsert_item(s, *, id: str, kind: str, source: str, text: str, url: str = "",
 def x_reads_today() -> int:
     with db.session() as s:
         return int(s.scalar(select(func.coalesce(func.sum(db.Run.x_reads), 0)).where(
-            db.Run.run_date == today_ny().isoformat())) or 0)
+            db.Run.run_date == today_ny().isoformat(), db.Run.job != "style_refresh")) or 0)  # refreshes have own cap
 
 
 def x_budget() -> int:
