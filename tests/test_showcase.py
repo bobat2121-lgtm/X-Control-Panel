@@ -263,6 +263,23 @@ class Watcher(unittest.TestCase):
         self.assertIn("still shows balance dates", out["blockers"][0]["detail"])
         self.assertEqual(sent, [])
 
+    def test_plan_go_no_go(self):
+        from xcp.agents import showcase_watch as w
+
+        def plan(day, hhmm, mode="watch", manual=False, panel=None):
+            with mock.patch.object(w, "today_ny", return_value=day), \
+                    mock.patch.object(w, "now_ny", return_value=at(day.year, day.month, day.day, *hhmm)):
+                return w.plan(mode, panel, manual=manual)
+
+        sat, sun, mon = date(2026, 9, 26), date(2026, 9, 27), date(2026, 9, 28)
+        self.assertFalse(plan(sat, (20, 13), "preflight")["go"])  # nothing on Sunday
+        self.assertTrue(plan(sat, (20, 13), "preflight", manual=True)["go"])  # the Control Room button
+        self.assertTrue(plan(sun, (20, 13), "preflight")["go"])  # eve of Monday's Ledger
+        self.assertFalse(plan(mon, (6, 41))["go"])  # EST copy of the 07:41 cron: too early
+        self.assertTrue(plan(mon, (7, 41))["go"])
+        self.assertFalse(plan(date(2026, 9, 29), (7, 41))["go"])  # ordinary Tuesday
+        self.assertTrue(plan(date(2026, 10, 13), (7, 41))["go"])  # Tuesday after Columbus Day
+
     def test_fact_only_captions_pass_the_editor(self):
         from xcp.agents import editor
 

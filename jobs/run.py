@@ -86,7 +86,8 @@ def main(argv: list[str] | None = None) -> int:
         from xcp.agents import showcase_watch
 
         if args.plan:
-            p = showcase_watch.plan(args.mode, args.panel or None)
+            p = showcase_watch.plan(args.mode, args.panel or None,
+                                    manual=os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch")
             lines = [f"go={'true' if p['go'] else 'false'}", f"panel={p.get('panel', '')}", f"reason={p['reason']}"]
             out = os.environ.get("GITHUB_OUTPUT")
             if out:

@@ -292,9 +292,11 @@ def watch(panel: str | None, mode: str, de_dir: Path, de_python: str, quiet: boo
         time.sleep(poll)
 
 
-def plan(mode: str, panel: str | None) -> dict:
+def plan(mode: str, panel: str | None, manual: bool = False) -> dict:
     """Cheap go / no-go before the workflow installs digital-exposure (extra cron starts exit here)."""
     d, now = today_ny(), now_ny()
+    if mode == "preflight" and manual:
+        return {"go": True, "reason": "manual preflight"}
     if mode == "preflight":
         tomorrow = showcase.panel_for(d + timedelta(days=1))
         if not tomorrow:
