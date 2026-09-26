@@ -18,6 +18,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
+from xcp import config
 from xcp.config import DATA_DIR, env
 from xcp.timeutil import utcnow
 
@@ -347,6 +348,7 @@ def kv_get(key: str, default=None):
 
 
 def kv_set(key: str, value) -> None:
+    config.forget(key)
     with session() as s:
         row = s.get(KV, key)
         if row is None:
@@ -358,6 +360,7 @@ def kv_set(key: str, value) -> None:
 
 
 def kv_delete(key: str) -> None:
+    config.forget(key)
     with session() as s:
         s.execute(delete(KV).where(KV.key == key))
         s.commit()

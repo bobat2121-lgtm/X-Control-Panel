@@ -131,8 +131,14 @@ market:
 writer:
   mode: monitor
 
+# Discord: only these alert kinds are sent. Everything else stays in the panel (Control Room shows what was held).
+# Kinds: showcase_ready, showcase_status, news_priority, watchlist, desk, drafts, weekly, style, errors, test
+alerts:
+  discord: [showcase_ready, test]   # showcase_ready = a Digital Credit Report panel is live for its post time
+
 # The news monitor runs every ~15 minutes (.github/workflows/monitor.yml): feeds, Google News, SEC 8-Ks, and
-# your watchlist on X (only new posts are billed). Priority items ping Discord as they appear.
+# your watchlist on X (only new posts are billed). It flags priority stories on the Monitor page; Discord pings for
+# news are off unless alerts.discord includes news_priority / watchlist.
 monitor:
   window_hours: 48            # how far back feeds are read
   x_watchlist: true           # poll your watchlist accounts on every monitor run
@@ -149,6 +155,7 @@ monitor:
   offlane_words: [XRP, Ripple, Solana, Dogecoin, DOGE, Cardano, memecoin, memecoins, "meme coin", Shiba, PEPE,
                   Litecoin, Avalanche, Polkadot, TRON, Toncoin, BNB, Hyperliquid, HYPE, Sui, Aptos, Pi Network]
   watchlist_digest_minutes: 30  # one Discord message with your accounts' new posts, at most this often (0 = off)
+  idea_min_engagement: 100     # idea feed: posts from accounts outside your 7 need this much traction (likes + 2×reposts + 3×quotes)
 
 # Voice mode. "classic" = the original style mix. "v2" = more of your own posts and only the admired accounts'
 # reasoning (no templates), plus the robot check (em dashes, AI phrases, same-shape lines). Control Room →

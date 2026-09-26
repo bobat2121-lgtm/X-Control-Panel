@@ -259,7 +259,7 @@ def evaluate(new_ids: list[str], ping: bool = True) -> list[dict]:
                            "author": it.author, "pillar": it.pillar, "kind": it.kind,
                            "published": aware(it.created_at) if it.created_at else None})
         s.commit()
-    if ping and cfg().get("ping", True) and not _quiet():
+    if ping and cfg().get("ping", True) and notify.allowed("news_priority") and not _quiet():
         pinged = set(db.kv_get(PINGED) or [])
         fresh_after = utcnow() - timedelta(hours=float(cfg().get("ping_fresh_hours", 3)))
         for ev in events:
@@ -267,7 +267,7 @@ def evaluate(new_ids: list[str], ping: bool = True) -> list[dict]:
                 continue  # already pinged, over the hourly limit, or old news seen for the first time
             label = config.pillars().get(ev["pillar"], {}).get("label", ev["pillar"])
             notify.discord(f"⚡ {ev['title'][:230]}", f"{ev['reason']} · {label}\n{ev['url']}",
-                           color=PILLAR_COLORS.get(ev["pillar"], 0xF7931A))
+                           color=PILLAR_COLORS.get(ev["pillar"], 0xF7931A), kind="news_priority")
             _record_ping(ev["key"])
             pinged.add(ev["key"])
     return events
@@ -276,7 +276,7 @@ def evaluate(new_ids: list[str], ping: bool = True) -> list[dict]:
 def watchlist_digest(new_ids: list[str]) -> bool:
     """One Discord message listing what your watchlist accounts just posted (at most every N minutes)."""
     minutes = int(cfg().get("watchlist_digest_minutes", 30))
-    if not new_ids or not minutes or not cfg().get("ping", True) or _quiet():
+    if not new_ids or not minutes or not cfg().get("ping", True) or not notify.allowed("watchlist") or _quiet():
         return False
     last = parse_iso(db.kv_get(LAST_WATCH_DIGEST))
     if last and utcnow() - last < timedelta(minutes=minutes):
@@ -289,7 +289,7 @@ def watchlist_digest(new_ids: list[str]) -> bool:
     if not rows:
         return False
     fields = [(f"@{r.author}", f"{' '.join((r.text or '').split())[:300]}\n{r.url}") for r in rows]
-    notify.discord(f"🎙 Your accounts just posted ({len(rows)})", "", fields, color=0x1DA1F2)
+    notify.discord(f"🎙 Your accounts just posted ({len(rows)})", "", fields, color=0x1DA1F2, kind="watchlist")
     db.kv_set(LAST_WATCH_DIGEST, utcnow().isoformat())
     return True
 

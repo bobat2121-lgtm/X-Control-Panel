@@ -167,5 +167,5 @@ def refresh(analyze: bool = True) -> dict:
                    f"Accounts: {acct}\nNew craft patterns: {stats['entries_added']}\n"
                    f"Your posts/replies: {stats['own_posts_seen']} read, {stats['own_added']} new in your voice library\n"
                    f"Reposts saved as 'amplified' signals: {stats['reposts_saved']}\n"
-                   f"X reads: {client.reads} (≈ ${client.reads * 0.005:.2f})")
+                   f"X reads: {client.reads} (≈ ${client.reads * 0.005:.2f})", kind="style")
     return stats

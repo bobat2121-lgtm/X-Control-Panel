@@ -1,186 +1,430 @@
-"""📡 Monitor: what's surfacing right now (your watchlist on X, news, regulators, SEC filings) and desk briefs.
+"""📡 Monitor: post ideas under the times you post, the live wire, your 7 accounts, and what you saved.
 
-You write the posts; this page hands you the news, the numbers and the angles, newest first.
+You write the posts. Ideas sit three to a row under each post time. Open one and it spans the page with the news,
+the numbers and a source under every item; write next to it, or move it to the Writer tab and keep it in view.
 """
 from __future__ import annotations
 
+import time
 from datetime import timedelta
+from urllib.parse import urlparse
 
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import badge, card_key, esc_html, esc_md, hero, is_owner, pillar_badge, section
-from xcp import config, db, gh, xtext
+from panel.common import PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, hero, is_owner, pillar_badge
+from xcp import config, db, gh, ideas, showcase, xtext
 from xcp.agents import monitor
-from xcp.timeutil import fmt_ago, fmt_ny, parse_iso, today_ny, utcnow
+from xcp.timeutil import fmt_ago, fmt_ny, now_ny, parse_iso, today_ny, utcnow
 
 PILLARS = config.pillars()
 LABEL = {k: v.get("label", k) for k, v in PILLARS.items()}
 KIND_LABEL = {"news": "News", "official": "Official", "filing": "SEC filings", "x_post": "X"}
+VIEWS = ["🗞 Idea feed", "✍️ Writer", "📡 Live wire", "🎙 Your 7", "⭐ Saved"]
+AI_GROUP = ("ai_models", "ai_benchmarks", "physical_ai")
+CATS = ["digital_credit", "stablecoins", "ai_payments", "legislation", "bitcoin", "macro", "ai"]
+CAT_LABEL = {**{k: f"{PILLAR_GLYPHS.get(k, '•')} {LABEL.get(k, k)}" for k in CATS}, "ai": "◈ AI models & robots"}
+PAGE = 9  # ideas per post time before "show more"
+WRITER_KV = "monitor:writer"
 owner = is_owner()
+
+
+# ------------------------------------------------------------------ data (memoized per browser session for a minute)
+
+def _memo(key, fn, ttl: float = 55):
+    memo = st.session_state.setdefault("_mon_memo", {})
+    hit = memo.get(key)
+    if hit and time.monotonic() - hit[0] < ttl:
+        return hit[1]
+    val = fn()
+    memo[key] = (time.monotonic(), val)
+    return val
+
+
+def _stream(hours: int, **kw) -> list[dict]:
+    return _memo(("stream", hours, tuple(sorted(kw.items()))), lambda: monitor.stream(hours=hours, **kw))
+
+
+def _briefs() -> list[dict]:
+    return _memo("briefs", ideas.load_briefs)
+
+
+def _bust() -> None:
+    st.session_state.pop("_mon_memo", None)
+
+
+def _writer() -> dict:
+    if "_writer" not in st.session_state:
+        saved = db.kv_get(WRITER_KV) if owner else None
+        st.session_state["_writer"] = saved if isinstance(saved, dict) else {"pins": [], "texts": {}}
+    return st.session_state["_writer"]
+
+
+def _persist() -> None:
+    if owner:
+        db.kv_set(WRITER_KV, _writer())
+
+
+def _safe(key: str) -> str:
+    return card_key("x", key)[2:]
 
 
 # ------------------------------------------------------------------ actions
 
-def _save_to_feed(ctx: dict, text: str) -> None:
+def _goto(view: str) -> None:
+    st.session_state["_mon_goto"] = view
+
+
+def _toggle(key: str) -> None:
+    st.session_state["mon_open"] = None if st.session_state.get("mon_open") == key else key
+
+
+def _more(occ_key: str) -> None:
+    st.session_state[f"more_{occ_key}"] = st.session_state.get(f"more_{occ_key}", PAGE) + PAGE
+
+
+def _set_status(idea: dict, status: str) -> None:
+    """status: saved | hidden (pass) | "" (back to new)."""
+    if idea["kind"] == "brief":
+        with db.session() as s:
+            s.get(db.Brief, idea["brief_id"]).status = {"hidden": "dismissed", "": "new"}.get(status, status)
+            s.commit()
+    else:
+        monitor.set_status(idea["story_key"], status)
+    if status == "hidden" and st.session_state.get("mon_open") == idea["key"]:
+        st.session_state["mon_open"] = None
+    _bust()
+    st.toast({"saved": "Saved. Find it under ⭐ Saved.", "hidden": "Passed. It won't come back.",
+              "": "Removed from Saved."}[status], icon="🗂")
+
+
+def _pin(idea: dict) -> None:
+    w = _writer()
+    w["pins"] = [p for p in w["pins"] if p["key"] != idea["key"]] + [idea]
+    st.session_state["wr_sel"] = idea["key"]
+    _persist()
+    _goto(VIEWS[1])
+
+
+def _unpin(key: str) -> None:
+    w = _writer()
+    w["pins"] = [p for p in w["pins"] if p["key"] != key]
+    _persist()
+
+
+def _keep_text(wk: str, key: str) -> None:
+    _writer()["texts"][key] = st.session_state.get(wk, "")
+    _persist()
+
+
+def _save_to_feed(idea: dict, wk: str) -> None:
+    text = st.session_state.get(wk, "")
+    if not text.strip():
+        return
     with db.session() as s:
         d = db.Draft(slot="on_demand", slot_date=today_ny().isoformat(), kind="regular", status="edited",
-                     pillar=ctx.get("pillar") or "bitcoin", lane=config.pillar_lane(ctx.get("pillar")), tone="timely",
-                     title=ctx["title"][:200], numbers=ctx.get("numbers") or [],
-                     inspiration=[{"label": x.get("kind", "news"), "url": x.get("url", ""), "author": x.get("publisher", ""),
-                                   "text": x.get("title", "")} for x in ctx.get("sources", [])[:6]])
+                     pillar=idea.get("pillar") or "bitcoin", lane=config.pillar_lane(idea.get("pillar")),
+                     tone="timely", title=idea["title"][:200], numbers=idea.get("numbers") or [],
+                     inspiration=[{"label": x.get("kind", "news"), "url": x.get("url", ""),
+                                   "author": x.get("publisher", ""), "text": x.get("title", "")}
+                                  for x in idea.get("items", [])[:6]])
         s.add(d)
         s.flush()
         db.add_variant_version(s, d.id, "A", xtext.split_parts(text), "mine", "me")
-        if ctx.get("brief_id"):
-            b = s.get(db.Brief, ctx["brief_id"])
+        if idea.get("brief_id"):
+            b = s.get(db.Brief, idea["brief_id"])
             b.status, b.draft_id = "used", d.id
         s.commit()
-    if ctx.get("story_key"):
-        monitor.set_status(ctx["story_key"], "used")
+    if idea.get("story_key"):
+        monitor.set_status(idea["story_key"], "used")
+    _keep_text(wk, idea["key"])
+    _bust()
     st.toast("Saved to the Feed. Post it from there or straight from X.", icon="✍️")
 
 
-@st.dialog("✍️ Write your post", width="large")
-def write_dialog(ctx: dict) -> None:
-    st.markdown(f"**{esc_md(ctx['title'])}**")
-    if ctx.get("what"):
-        st.markdown(esc_md(ctx["what"]))
-    if ctx.get("why"):
-        st.caption(f"Why it matters: {ctx['why']}")
-    if ctx.get("numbers"):
-        st.dataframe(ctx["numbers"], hide_index=True, width="stretch")
-    if ctx.get("angles"):
-        st.markdown("**Angles to think about**\n" + "\n".join(f"- {esc_md(a)}" for a in ctx["angles"]))
-    for x in ctx.get("sources", [])[:6]:
-        st.markdown(f"- [{esc_md(x.get('publisher', ''))}: {esc_md(x.get('title', '')[:100])}]({x.get('url', '')})")
-    text = st.text_area("Your post", key=f"wr_{ctx['key']}", height=170,
-                        placeholder="Your take, in your words. Separate thread posts with a line containing only ---")
-    n = xtext.weighted_len(xtext.split_parts(text)[0]) if text.strip() else 0
-    st.caption(f"{n} characters" + (" · Premium long post: the hook must land in the first 280" if n > 280 else ""))
-    c = st.columns(2)
-    first = xtext.split_parts(text)[0] if text.strip() else ""
-    link = xtext.intent_quote(ctx["quote_url"], first) if ctx.get("quote_url") else xtext.intent_post(first)
-    c[0].link_button("🚀 Open in X" + (" (quote post)" if ctx.get("quote_url") else ""), link, type="primary",
-                     width="stretch", disabled=not first)
-    if c[1].button("💾 Save to the Feed", width="stretch", disabled=not first):
-        _save_to_feed(ctx, text)
-        st.rerun()
+# ------------------------------------------------------------------ pieces
+
+def _label_md(text: str) -> str:
+    """Button labels render markdown: escape it so headlines show as typed."""
+    out = str(text)
+    for ch in "\\*_[]`~$#<>":
+        out = out.replace(ch, "\\" + ch)
+    return out
 
 
-def _story_ctx(c: dict) -> dict:
-    lead = c["lead"]
-    return {"key": f"s_{c['key']}", "story_key": c["key"], "title": c["title"], "pillar": c["pillar"],
-            "what": "" if lead.kind == "x_post" else " ".join((lead.text or "").split("\n", 1)[-1].split())[:500],
-            "quote_url": lead.url if lead.kind == "x_post" else None,
-            "sources": [{"title": monitor.title_of(m), "url": m.url, "kind": m.kind,
-                         "publisher": f"@{m.author}" if m.kind == "x_post" else (m.author or m.source)}
-                        for m in c["members"]]}
+def _url(u) -> str:
+    return u if isinstance(u, str) and u.startswith(("http://", "https://")) else ""
 
 
-def _brief_ctx(b: db.Brief) -> dict:
-    return {"key": f"b_{b.id}", "brief_id": b.id, "title": b.title, "what": b.what, "why": b.why,
-            "numbers": b.numbers, "angles": b.angles, "pillar": b.pillar, "sources": b.sources,
-            "quote_url": next((x["url"] for x in b.sources if x.get("kind") == "x_post"), None)
-            if b.kind == "reply_target" else None}
+def _domain(u: str) -> str:
+    try:
+        return urlparse(u).netloc.removeprefix("www.")
+    except ValueError:
+        return ""
 
 
-def _brief_status(bid: int, status: str) -> None:
-    with db.session() as s:
-        s.get(db.Brief, bid).status = status
-        s.commit()
+def _is_new(idea: dict) -> bool:
+    first, newest = parse_iso(idea.get("first_seen")), parse_iso(idea.get("newest"))
+    return bool(first and newest and utcnow() - first < timedelta(minutes=30) and utcnow() - newest < timedelta(hours=3))
 
 
-# ------------------------------------------------------------------ cards
-
-def _actions(c: dict, where: str) -> None:
-    if st.button("✍️ Write", key=f"w_{where}_{c['key']}", type="primary"):
-        write_dialog(_story_ctx(c))
-    if st.button("⭐", key=f"sv_{where}_{c['key']}", help="Save for later"):
-        monitor.set_status(c["key"], "" if c["status"] == "saved" else "saved")
-        st.rerun()
-    if st.button("🙈", key=f"hd_{where}_{c['key']}", help="Hide this story"):
-        monitor.set_status(c["key"], "hidden")
-        st.rerun()
+def _cat(pillar: str) -> str:
+    return "ai" if pillar in AI_GROUP else pillar
 
 
-def story_card(c: dict, compact: bool = False, where: str = "live") -> None:
+def _chips(idea: dict, full: bool = False) -> str:
+    chips = [pillar_badge(idea["pillar"])] if full else []
+    if idea["kind"] == "brief":
+        chips.append(badge("🧠 desk pick", "ink"))
+    if idea.get("priority"):
+        chips.append(badge("⚡ " + idea["priority"][:36], "hot" if idea["hot"] else "paper"))
+    if _is_new(idea):
+        chips.append(badge("NEW!", "new"))
+    if idea.get("watchlist"):
+        chips.append(badge("🎙 your 7", "ink"))
+    if idea.get("status") in ("saved", "used"):
+        chips.append(badge("⭐ saved" if idea["status"] == "saved" else "✅ written", "paper"))
+    if full and idea.get("publishers", 0) > 1:
+        chips.append(badge(f"{idea['publishers']} outlets", "tan"))
+    return " ".join(chips)
+
+
+def _meta(idea: dict) -> str:
+    items = idea.get("items", [])
+    lead = items[0] if items else {}
+    when = parse_iso(idea.get("newest"))
+    n = len(items)
+    bits = [f"{n} source{'s' if n != 1 else ''}"] if n else []
+    if lead.get("publisher"):
+        bits.append(lead["publisher"])
+    if when:
+        bits.append(("desk " if idea["kind"] == "brief" else "") + fmt_ago(when))
+    return " · ".join(bits)
+
+
+def _news_html(items: list[dict]) -> str:
+    out = []
+    for x in items:
+        url = _url(x.get("url"))
+        at = parse_iso(x.get("at")) if x.get("at") else None
+        head = f"{x.get('publisher', '')} on X" if x.get("kind") == "x_post" else x.get("title", "")
+        body = x.get("snippet", "")
+        who = esc_html(x.get("publisher") or _domain(url) or "source")
+        src = [f'<a href="{esc_html(url)}" target="_blank" rel="noopener">{who} ↗</a>' if url else who]
+        if url and _domain(url):
+            src.append(esc_html(_domain(url)))
+        if at:
+            src.append(fmt_ago(at))
+        if x.get("official"):
+            src.append("official")
+        mt = x.get("metrics") or {}
+        if x.get("kind") == "x_post" and mt:
+            src.append(f"♥ {mt.get('like_count', 0):,} · 🔁 {mt.get('retweet_count', 0):,}")
+        title = (f'<a href="{esc_html(url)}" target="_blank" rel="noopener">{esc_html(head)}</a>' if url
+                 else esc_html(head))
+        out.append(f'<div class="xcp-news"><div class="h">{title}</div>'
+                   + (f'<div class="s">{esc_html(body)}</div>' if body else "")
+                   + f'<div class="src"><b>SOURCE</b> {" · ".join(src)}</div></div>')
+    return "".join(out)
+
+
+def _lbl(text: str) -> None:
+    st.markdown(f'<div class="xcp-lbl">{esc_html(text)}</div>', unsafe_allow_html=True)
+
+
+def idea_body(idea: dict) -> None:
+    st.markdown(_chips(idea, full=True), unsafe_allow_html=True)
+    st.markdown(f'<div class="xcp-idea-h">{esc_html(idea["title"])}</div>', unsafe_allow_html=True)
+    if idea.get("what"):
+        _lbl("What happened")
+        st.markdown(esc_md(idea["what"]))
+    if idea.get("why"):
+        _lbl("Why it matters")
+        st.markdown(esc_md(idea["why"]))
+    if idea.get("numbers"):
+        _lbl("The numbers")
+        st.dataframe([{"": x.get("label", ""), "value": x.get("value", ""), "source": x.get("source", "")}
+                      for x in idea["numbers"]], hide_index=True, width="stretch")
+    if idea.get("flags"):
+        st.caption("⚠️ Check before using: " + "; ".join(idea["flags"]))
+    if idea.get("angles"):
+        _lbl("Ways in")
+        st.markdown("\n".join(f"- {esc_md(a)}" for a in idea["angles"]))
+    items = idea.get("items", [])
+    _lbl(f"The news · {len(items)} source{'s' if len(items) != 1 else ''}")
+    st.markdown(_news_html(items) or "<div class='xcp-muted'>No sources on file.</div>", unsafe_allow_html=True)
+    more = ideas.related(idea, POOL)
+    if more:
+        _lbl(f"More on this · {len(more)} related stor{'ies' if len(more) != 1 else 'y'}")
+        st.markdown(_news_html([x["items"][0] for x in more if x.get("items")]), unsafe_allow_html=True)
+
+
+def composer(idea: dict, where: str, big: bool = False) -> None:
+    safe = _safe(idea["key"])
+    wk = f"cmp_{where}_{safe}"
+    with st.container(key=f"composer_{where}_{safe}"):
+        st.markdown('<div class="xcp-comp-h">✍ Your post</div>', unsafe_allow_html=True)
+        if not owner:
+            st.caption("View only. Unlock with 🔑 Owner to write.")
+            return
+        if wk not in st.session_state:
+            st.session_state[wk] = _writer()["texts"].get(idea["key"], "")
+        text = st.text_area("Your post", key=wk, height=400 if big else 230, label_visibility="collapsed",
+                            on_change=_keep_text, args=(wk, idea["key"]),
+                            placeholder="Your take, in your words. A line with only --- starts the next post "
+                                        "in a thread. Ctrl+Enter locks the text in.")
+        parts = xtext.split_parts(text) if text.strip() else []
+        n = xtext.weighted_len(parts[0]) if parts else 0
+        st.caption(f"{n}/280" + (f" · thread of {len(parts)}" if len(parts) > 1 else "")
+                   + (" · long post: land the hook in the first 280" if n > 280 else ""))
+        first = parts[0] if parts else ""
+        quote = idea.get("quote_url") or (idea["items"][0]["url"] if idea.get("items")
+                                          and idea["items"][0].get("kind") == "x_post" else None)
+        link = xtext.intent_quote(quote, first) if quote else xtext.intent_post(first)
+        c = st.columns(2)
+        c[0].link_button("🚀 Open in X" + (" (quote)" if quote else ""), link, type="primary", width="stretch",
+                         disabled=not first)
+        c[1].button("💾 Save to Feed", key=f"sv_{wk}", on_click=_save_to_feed, args=(idea, wk), width="stretch",
+                    disabled=not first)
+        c = st.columns(2)
+        if where == "writer":
+            c[0].button("📌 Unpin", key=f"up_{wk}", on_click=_unpin, args=(idea["key"],), width="stretch")
+        else:
+            c[0].button("↗ Writer tab", key=f"pin_{wk}", on_click=_pin, args=(idea,), width="stretch",
+                        help="Pin this idea next to a bigger editor (it stays there until you unpin it)")
+            c[1].button("▴ Close", key=f"cl_{wk}", on_click=_toggle, args=(idea["key"],), width="stretch")
+
+
+def detail(idea: dict, where: str, occ: dict | None = None) -> None:
+    """The opened idea: spans the page, the news on the left, your post on the right."""
+    safe = _safe(idea["key"])
+    with st.container(key=f"detail_{where}_{safe}"):
+        slot = f" · for {occ['label']} {occ['post_at'].strftime('%a %I:%M %p').replace(' 0', ' ')}" if occ else ""
+        st.markdown(f'<div class="xcp-tb xcp-dtb"><span class="xcp-tb-l">▣ IDEA.TXT — '
+                    f'{esc_html(LABEL.get(idea["pillar"], idea["pillar"]))}{esc_html(slot)}</span>'
+                    f'<span class="xcp-tb-r"><i>_</i><i>▢</i><i class="x">✕</i></span></div>', unsafe_allow_html=True)
+        left, right = st.columns([1.55, 1], gap="large")
+        with left:
+            idea_body(idea)
+        with right:
+            composer(idea, where)
+
+
+def tile(idea: dict, where: str) -> None:
+    """Collapsed idea: what the post is on. Click the headline to open it full width."""
+    k, safe = idea["key"], _safe(idea["key"])
+    is_open = st.session_state.get("mon_open") == k
+    prefix = "open" if is_open else ("hot" if idea["hot"] else "card")
+    with st.container(border=True, key=f"{prefix}_{where}_{safe}"):
+        topic = LABEL.get(idea["pillar"], idea["pillar"])
+        st.markdown(f'<div class="xcp-poston"><span></span>Post on · {PILLAR_GLYPHS.get(idea["pillar"], "")} '
+                    f'{esc_html(topic)}</div>', unsafe_allow_html=True)
+        chips = _chips(idea)
+        if chips:
+            st.markdown(chips, unsafe_allow_html=True)
+        title = idea["title"] if len(idea["title"]) <= 150 else idea["title"][:147].rstrip() + "…"
+        st.button(("▴ " if is_open else "▾ ") + _label_md(title), key=f"ih_{where}_{safe}", on_click=_toggle,
+                  args=(k,), width="stretch", help="Close" if is_open else "Open the news, numbers and sources")
+        st.markdown(f"<div class='xcp-muted'>{esc_html(_meta(idea))}</div>", unsafe_allow_html=True)
+        if owner:
+            with st.container(horizontal=True, gap="small", key=f"acts_{where}_{safe}"):
+                saved = idea.get("status") == "saved"
+                st.button("★ Saved" if saved else "☆ Save", key=f"is_{where}_{safe}", on_click=_set_status,
+                          args=(idea, "" if saved else "saved"))
+                st.button("✕ Pass", key=f"ip_{where}_{safe}", on_click=_set_status, args=(idea, "hidden"),
+                          help="Not posting about this. It won't come back.")
+
+
+def grid(items: list[dict], where: str, occ: dict | None = None) -> None:
+    """Three to a row; an opened idea unfolds full width right under its row."""
+    open_k = st.session_state.get("mon_open")
+    tag = _safe(occ["key"] if occ else where)
+    for r in range(0, len(items), 3):
+        row = items[r:r + 3]
+        with st.container(key=f"irow_{tag}_{r}"):
+            cols = st.columns(3)
+            for col, idea in zip(cols, row):
+                with col:
+                    tile(idea, where)
+        for idea in row:
+            if idea["key"] == open_k:
+                detail(idea, where, occ)
+
+
+def _hm(td: timedelta) -> str:
+    mins = int(td.total_seconds() // 60)
+    if mins < 60:
+        return f"{mins}m"
+    h, m = divmod(mins, 60)
+    return f"{h}h {m:02d}m" if h < 24 else f"{h // 24}d {h % 24}h"
+
+
+def slot_header(o: dict, n: int, first_up: bool, now) -> None:
+    t = o["post_at"]
+    hh, ampm = t.strftime("%I:%M").lstrip("0"), t.strftime("%p")
+    day = ("Today" if t.date() == now.date() else "Tomorrow" if t.date() == (now + timedelta(days=1)).date()
+           else "Yesterday" if t.date() == (now - timedelta(days=1)).date() else t.strftime("%A"))
+    right = []
+    if o["passed"]:
+        right.append(badge("passed", "paper"))
+    elif first_up:
+        right.append(badge(f"up next · in {_hm(t - now)}", "hot"))
+    else:
+        right.append(badge(f"in {_hm(t - now)}", "tan"))
+    if o.get("panel"):
+        status = ideas.showcase_status(o) or "waiting"
+        right.append(badge(f"🖼 {showcase.title(o['panel'])} · {status}",
+                           "olive" if status in ("ready", "posted") else "ink"))
+    lane = "BTC lane · digital credit, stablecoins, legislation, bitcoin, macro" if o["lane"] == "btc" else "AI lane"
+    run = f" · desk picks land at {o['run_at']}" if o.get("run_at") and not o["passed"] else ""
+    cls = "xcp-slot" + (" next" if first_up else "") + (" past" if o["passed"] else "")
+    st.markdown(f'<div class="{cls}"><div class="t">{hh}<small>{ampm}</small></div>'
+                f'<div class="m"><div class="l">{esc_html(o["label"])} · {day}</div>'
+                f'<div class="s">{esc_html(lane)} · {n} idea{"s" if n != 1 else ""}{esc_html(run)}</div></div>'
+                f'<div class="r">{" ".join(right)}</div></div>', unsafe_allow_html=True)
+
+
+# ------------------------------------------------------------------ live wire cards (raw stories)
+
+def story_card(c: dict, where: str = "live") -> None:
     lead = c["lead"]
     published = lead.created_at or lead.fetched_at
-    new = bool(c["first_seen"] and utcnow() - c["first_seen"] < timedelta(minutes=30)
-               and utcnow() - (published if published.tzinfo else published.replace(tzinfo=c["first_seen"].tzinfo))
-               < timedelta(hours=3))
+    idea = ideas.from_story(c)
     with st.container(border=True, key=card_key("hot" if c["priority"] else "card", f"{where}_{c['key']}")):
-        body, side = (st.container(), None) if compact or not owner else st.columns([7, 1.9], vertical_alignment="center")
+        body, side = (st.container(), None) if not owner else st.columns([7, 2.1], vertical_alignment="center")
         with body:
-            chips = [pillar_badge(c["pillar"])]
-            if c["priority"]:
-                chips.append(badge("⚡ " + c["priority"][:40], "hot"))
-            if new:
-                chips.append(badge("NEW!", "new"))
-            if (lead.meta or {}).get("watchlist"):
-                chips.append(badge("🎙 your 7", "ink"))
-            if c["status"] in ("saved", "used"):
-                chips.append(badge("⭐ saved" if c["status"] == "saved" else "✅ used", "paper"))
             who = f"@{lead.author}" if lead.kind == "x_post" else (lead.author or lead.source)
             more = f" · +{c['publishers'] - 1} outlets" if c["publishers"] > 1 else ""
-            chips.append(f"<span class='xcp-muted'>{esc_html(who)} · {fmt_ago(published)}{more}</span>")
-            st.markdown(" ".join(chips), unsafe_allow_html=True)
+            st.markdown(f"{pillar_badge(c['pillar'])} {_chips(idea)} <span class='xcp-muted'>{esc_html(who)} · "
+                        f"{fmt_ago(published)}{more}</span>", unsafe_allow_html=True)
             if lead.kind == "x_post":
                 mt = lead.metrics or {}
-                st.markdown(esc_md(" ".join((lead.text or "").split())[:500 if not compact else 200]))
+                st.markdown(esc_md(" ".join((lead.text or "").split())[:500]))
                 st.caption(f"♥ {mt.get('like_count', 0):,} · 🔁 {mt.get('retweet_count', 0):,} · "
                            f"💬 {mt.get('reply_count', 0):,} · [open on X ↗]({lead.url})")
             else:
                 st.markdown(f"**[{esc_md(c['title'][:160])}]({lead.url})**")
-                if not compact and "\n" in (lead.text or ""):
-                    snippet = " ".join((lead.text or "").split("\n", 1)[-1].split())[:240]
-                    if snippet:
-                        st.caption(snippet)
-            if c["publishers"] > 1 and not compact:
+                snippet = idea["items"][0]["snippet"][:240] if idea["items"] else ""
+                if snippet:
+                    st.caption(snippet)
+            if c["publishers"] > 1:
                 with st.expander(f"{c['publishers']} outlets on this"):
-                    for m in c["members"]:
-                        st.markdown(f"- [{esc_md(m.author or m.source)}: {esc_md(monitor.title_of(m)[:110])}]({m.url}) "
-                                    f"<span class='xcp-muted'>{fmt_ago(m.created_at or m.fetched_at)}</span>",
-                                    unsafe_allow_html=True)
+                    st.markdown(_news_html(idea["items"]), unsafe_allow_html=True)
         if owner:
-            with (side if side is not None else st.container()):
-                with st.container(horizontal=True, horizontal_alignment="right" if side is not None else "left",
-                                  gap="small"):
-                    _actions(c, where)
-
-
-def brief_card(b: db.Brief) -> None:
-    with st.container(border=True, key=card_key("hot" if b.priority >= 3 else "card", f"brief_{b.id}")):
-        chips = [pillar_badge(b.pillar), badge({3: "⚡ post now", 2: "today", 1: "worth knowing"}.get(b.priority, ""),
-                                               {3: "hot", 2: "ink"}.get(b.priority, "paper"))]
-        if b.status in ("saved", "used"):
-            chips.append(badge("⭐ saved" if b.status == "saved" else "✅ used", "paper"))
-        chips.append(f"<span class='xcp-muted'>{esc_html(b.run_slot)} desk · {fmt_ago(b.created_at)}</span>")
-        st.markdown(" ".join(chips), unsafe_allow_html=True)
-        st.markdown(f"**{esc_md(b.title)}**")
-        if b.what:
-            st.markdown(esc_md(b.what))
-        if b.why:
-            st.caption(f"Why it matters: {b.why}")
-        if b.numbers:
-            st.caption(" · ".join(f"{x['label']}: {x['value']}" for x in b.numbers[:6]))
-        if b.angles:
-            st.markdown("\n".join(f"- _{esc_md(a)}_" for a in b.angles))
-        if b.flags:
-            st.caption("⚠️ " + "; ".join(b.flags))
-        if b.sources:
-            st.caption(" · ".join(f"[{x.get('publisher', 'source')}]({x.get('url', '')})" for x in b.sources[:5]))
-        if owner:
-            c = st.columns([1.2, 1, 1, 3])
-            if c[0].button("✍️ Write", key=f"bw_{b.id}", width="stretch"):
-                write_dialog(_brief_ctx(b))
-            if c[1].button("⭐", key=f"bs_{b.id}", help="Save for later", width="stretch"):
-                _brief_status(b.id, "new" if b.status == "saved" else "saved")
-                st.rerun()
-            if c[2].button("🙈", key=f"bh_{b.id}", help="Dismiss", width="stretch"):
-                _brief_status(b.id, "dismissed")
-                st.rerun()
+            with side:
+                with st.container(horizontal=True, horizontal_alignment="right", gap="small"):
+                    if st.button("✍️ Write", key=f"w_{where}_{c['key']}", type="primary",
+                                 help="Open it in the Writer tab"):
+                        _pin(idea)
+                        st.rerun()
+                    if st.button("⭐", key=f"sv_{where}_{c['key']}", help="Save for later"):
+                        monitor.set_status(c["key"], "" if c["status"] == "saved" else "saved")
+                        _bust()
+                        st.rerun()
+                    if st.button("🙈", key=f"hd_{where}_{c['key']}", help="Hide this story"):
+                        monitor.set_status(c["key"], "hidden")
+                        _bust()
+                        st.rerun()
 
 
 # ------------------------------------------------------------------ page
@@ -190,25 +434,37 @@ def _check_now() -> None:
         news = monitor.ingest_news()
         monitor.cluster_recent()
         monitor.evaluate(news["new_ids"], ping=False)
+    _bust()
     ok = gh.can_dispatch() and gh.dispatch("monitor.yml")[0]  # the cloud run adds X and SEC filings
     st.toast(f"{len(news['new_ids'])} new stories from the news feeds"
              + (" · X and SEC filings arrive in about a minute" if ok else ""), icon="📡")
 
 
+if "_mon_goto" in st.session_state:
+    st.session_state["mon_view"] = st.session_state.pop("_mon_goto")
+st.session_state.setdefault("mon_view", VIEWS[0])
+
+now = now_ny()
 last = db.kv_get("monitor:last_run") or {}
-_now12 = monitor.stream(hours=12)
-_watch24 = monitor.stream(hours=24, kinds=("x_post",), watchlist_only=True, include_offtopic=True)
-with db.session() as _s:
-    _briefs_today = _s.query(db.Brief).filter(db.Brief.run_date == today_ny().isoformat(),
-                                              db.Brief.kind == "story").count()
-_pri = sum(1 for c in _now12 if c["priority"] and c["status"] != "hidden")
-_latest = sorted(_now12, key=lambda c: c["newest"], reverse=True)[:14]
+occs = ideas.occurrences(now)
+stories72 = _stream(72)
+groups = ideas.assign(stories72, _briefs(), occs, now)
+POOL = [x for L in groups.values() for x in L]  # for "More on this" under an opened idea
+upcoming = [o for o in occs if not o["passed"]]
+nxt = upcoming[0] if upcoming else None
+cut12, cut24 = utcnow() - timedelta(hours=12), utcnow() - timedelta(hours=24)
+_pri = sum(1 for c in stories72 if c["priority"] and c["status"] != "hidden" and c["newest"] >= cut12)
+_watch24 = sum(1 for c in stories72 if c["lead"].kind == "x_post" and (c["lead"].meta or {}).get("watchlist")
+               and c["newest"] >= cut24)
+_latest = sorted((c for c in stories72 if c["newest"] >= cut12), key=lambda c: c["newest"], reverse=True)[:14]
 _n_sources = len(monitor.feeds()) + len(monitor.watchlist_handles()) + 2
-hero("MONITOR.EXE", "What's surfacing <em>right now</em>.",
-     "Your 7 accounts on X, the crypto outlets, regulators, Google News topics and SEC filings. Newest first. "
-     "You write the posts.",
-     stats=[(_pri, "⚡ priority now", _pri > 0), (len(_now12), "stories · 12h"),
-            (len(_watch24), "🎙 your 7 · 24h"), (_briefs_today, "desk briefs today")],
+hero("MONITOR.EXE", "Ideas for your <em>next post</em>.",
+     "Ideas sit under the times you post. Open one to see the news, the numbers and every source full width, "
+     "then write next to it or move it to the Writer tab. You write the posts.",
+     stats=[(nxt["post_at"].strftime("%I:%M %p").lstrip("0") if nxt else "—",
+             f"next · {nxt['label'].split(' ', 1)[-1]}" if nxt else "next post", True),
+            (len(groups.get(nxt["key"], [])) if nxt else 0, "ideas for it"),
+            (_pri, "⚡ priority · 12h", _pri > 0), (_watch24, "🎙 your 7 · 24h")],
      kicker=(f"live wire · checked {fmt_ago(parse_iso(last['at']))} · {_n_sources} sources" if last.get("at")
              else f"live wire · {_n_sources} sources"),
      ticker=[("NEW:" if c["first_seen"] and utcnow() - c["first_seen"] < timedelta(minutes=30) else "")
@@ -216,13 +472,69 @@ hero("MONITOR.EXE", "What's surfacing <em>right now</em>.",
 if owner:
     tb = st.columns([5, 1.3])
     tb[0].caption(f"Last check: {last.get('news_new', 0)} new stories · {last.get('x_new', 0)} new posts from your "
-                  f"accounts · {last.get('priority', 0)} flagged" if last.get("at") else "The monitor hasn't run yet.")
+                  f"accounts · {last.get('priority', 0)} flagged · Discord only pings when a Digital Credit Report "
+                  f"panel goes live" if last.get("at") else "The monitor hasn't run yet.")
     tb[1].button("🔄 Check now", on_click=_check_now, width="stretch", type="primary",
                  help="Pulls the news feeds right away; X and SEC filings follow from the cloud")
 
-tab_live, tab_briefs, tab_watch, tab_saved = st.tabs(["🗞 Live", "🧠 Desk briefs", "🎙 Your 7", "⭐ Saved"])
+pins = _writer()["pins"]
+view = st.segmented_control("View", VIEWS, key="mon_view", required=True, label_visibility="collapsed",
+                            format_func=lambda v: v + (f" ({len(pins)})" if v == VIEWS[1] and pins else ""),
+                            width="stretch")
 
-with tab_live:
+# ------------------------------------------------------------------ 🗞 idea feed
+if view == VIEWS[0]:
+    f = st.columns([5, 1.3, 1])
+    cats = f[0].pills("Categories", CATS, format_func=CAT_LABEL.get, selection_mode="multi", key="if_cats")
+    pri_only = f[1].toggle("⚡ Priority only", key="if_pri")
+    f[2].button("↻ Refresh", on_click=_bust, width="stretch", key="if_ref")
+
+    def keep(x: dict) -> bool:
+        return (not cats or _cat(x["pillar"]) in cats) and (not pri_only or x["hot"] or bool(x.get("priority")))
+
+    shown = 0
+    for o in occs:
+        items = [x for x in groups.get(o["key"], []) if keep(x)]
+        if o["passed"] and not items:
+            continue
+        slot_header(o, len(items), o is nxt, now)
+        if not items:
+            st.caption("Nothing here yet. It fills as news breaks; the desk adds researched picks at "
+                       f"{o.get('run_at') or 'the slot run'}.")
+            continue
+        n = st.session_state.get(f"more_{o['key']}", PAGE)
+        grid(items[:n], "feed", o)
+        shown += 1
+        if len(items) > n:
+            st.button(f"▾ Show {min(PAGE, len(items) - n)} more · {len(items) - n} left for this slot",
+                      key=f"more_btn_{o['key']}", on_click=_more, args=(o["key"],), width="stretch")
+    if not shown and (cats or pri_only):
+        st.info("No ideas match these filters right now.", icon="🗞")
+
+# ------------------------------------------------------------------ ✍️ writer
+elif view == VIEWS[1]:
+    if not pins:
+        st.info("Open any idea and press ↗ Writer tab. It stays pinned here next to a bigger editor until you "
+                "unpin it, and your text is kept.", icon="✍️")
+    else:
+        keys = [p["key"] for p in reversed(pins)]
+        if st.session_state.get("wr_sel") not in keys:
+            st.session_state["wr_sel"] = keys[0]
+        by_key = {p["key"]: p for p in pins}
+        sel = st.pills("Pinned ideas", keys, key="wr_sel", selection_mode="single",
+                       format_func=lambda k: by_key[k]["title"][:46] + ("…" if len(by_key[k]["title"]) > 46 else ""))
+        idea = by_key[sel or keys[0]]
+        fresh = {x["key"]: x for L in groups.values() for x in L}  # newer outlets / numbers since it was pinned
+        idea = fresh.get(idea["key"], idea)
+        left, right = st.columns([1.4, 1], gap="large")
+        with left:
+            with st.container(height=700, key="wr_scroll"):
+                idea_body(idea)
+        with right:
+            composer(idea, "writer", big=True)
+
+# ------------------------------------------------------------------ 📡 live wire
+elif view == VIEWS[2]:
     f = st.columns([3, 2.2, 1.6])
     topics = f[0].pills("Topics", list(PILLARS), format_func=LABEL.get, selection_mode="multi", key="mon_topics")
     hours = f[1].segmented_control("Window", [1, 3, 6, 12, 24, 48], default=12, format_func=lambda h: f"{h}h",
@@ -236,14 +548,7 @@ with tab_live:
 
     @st.fragment(run_every="60s")
     def live() -> None:
-        stories = monitor.stream(hours=int(hours), include_offtopic=offlane)
-        pri = [c for c in stories if c["priority"] and c["status"] != "hidden"]
-        if pri:
-            section("Priority", "pulsing = worth posting about now")
-            cols = st.columns(min(3, len(pri)))
-            for i, c in enumerate(sorted(pri, key=lambda c: c["newest"], reverse=True)[:3]):
-                with cols[i]:
-                    story_card(c, compact=True, where="pri")
+        stories = _stream(int(hours), include_offtopic=offlane)
         want = set(kinds or KIND_LABEL)
         out = []
         for c in stories:
@@ -263,21 +568,34 @@ with tab_live:
 
     live()
 
-with tab_briefs:
-    since = utcnow() - timedelta(hours=36)
+# ------------------------------------------------------------------ 🎙 your 7
+elif view == VIEWS[3]:
+    handles = sorted({a["handle"].lstrip("@") for a in config.get("watchlist").get("accounts", []) if a.get("handle")})
+    who = st.pills("Accounts", handles, selection_mode="multi", key="mon_who")
+
+    @st.fragment(run_every="60s")
+    def watch() -> None:
+        posts = _stream(48, kinds=("x_post",), watchlist_only=True, include_offtopic=True)
+        if who:
+            wanted = {h.lower() for h in who}
+            posts = [c for c in posts if (c["lead"].author or "").lower() in wanted]
+        posts = sorted((c for c in posts if c["status"] != "hidden"), key=lambda c: c["newest"], reverse=True)
+        st.caption(f"{len(posts)} posts in the last 48 hours · checked every 15 minutes")
+        for c in posts[:60]:
+            story_card(c, where="watch")
+        if not posts:
+            st.info("No posts from your accounts in the last 48 hours yet.", icon="🎙")
+
+    watch()
     with db.session() as s:
-        briefs = list(s.scalars(select(db.Brief).where(db.Brief.created_at >= since, db.Brief.status != "dismissed")
-                                .order_by(db.Brief.created_at.desc())).all())
-    stories_b = [b for b in briefs if b.kind == "story"]
-    replies_b = [b for b in briefs if b.kind == "reply_target"]
-    if not stories_b:
-        st.info("No desk briefs yet. The desk writes them at your slot times (7:05, 11:20, 12:50 and Friday 16:10 "
-                "ET), or run a slot from Control Room.", icon="🧠")
-    for b in sorted(stories_b, key=lambda b: (b.created_at.date(), b.priority, b.created_at), reverse=True):
-        brief_card(b)
+        replies_b = list(s.scalars(select(db.Brief).where(db.Brief.kind == "reply_target",
+                                                          db.Brief.created_at >= utcnow() - timedelta(hours=36),
+                                                          db.Brief.status != "dismissed")
+                                   .order_by(db.Brief.created_at.desc()).limit(6)).all())
     if replies_b:
-        section("Worth replying to", "from the desk")
-        for b in replies_b[:6]:
+        st.markdown('<div class="xcp-sec"><span class="bar"></span><h3>Worth replying to</h3>'
+                    '<span class="note">picked by the desk</span></div>', unsafe_allow_html=True)
+        for b in replies_b:
             with st.container(border=True, key=card_key("card", f"reply_{b.id}")):
                 st.markdown(esc_md(b.title))
                 st.caption(f"Why: {b.why}")
@@ -289,34 +607,11 @@ with tab_briefs:
                         c[0].link_button("↩️ Reply on X", xtext.intent_reply(tid, ""), width="stretch")
                     c[1].link_button("Open post ↗", url, width="stretch")
 
-with tab_watch:
-    handles = sorted({a["handle"].lstrip("@") for a in config.get("watchlist").get("accounts", []) if a.get("handle")})
-    who = st.pills("Accounts", handles, selection_mode="multi", key="mon_who")
-
-    @st.fragment(run_every="60s")
-    def watch() -> None:
-        posts = monitor.stream(hours=48, kinds=("x_post",), watchlist_only=True, include_offtopic=True)
-        if who:
-            wanted = {h.lower() for h in who}
-            posts = [c for c in posts if (c["lead"].author or "").lower() in wanted]
-        posts = [c for c in posts if c["status"] != "hidden"]
-        posts.sort(key=lambda c: c["newest"], reverse=True)
-        st.caption(f"{len(posts)} posts in the last 48 hours · checked every 15 minutes")
-        for c in posts[:60]:
-            story_card(c, where="watch")
-        if not posts:
-            st.info("No posts from your accounts in the last 48 hours yet.", icon="🎙")
-
-    watch()
-
-with tab_saved:
-    saved = [c for c in monitor.stream(hours=24 * 7, include_offtopic=True) if c["status"] == "saved"]
-    with db.session() as s:
-        saved_b = list(s.scalars(select(db.Brief).where(db.Brief.status == "saved").order_by(db.Brief.created_at.desc())
-                                 .limit(40)).all())
-    if not saved and not saved_b:
-        st.info("Nothing saved yet. Press ⭐ on any story or brief.", icon="⭐")
-    for b in saved_b:
-        brief_card(b)
-    for c in sorted(saved, key=lambda c: c["newest"], reverse=True):
-        story_card(c, where="saved")
+# ------------------------------------------------------------------ ⭐ saved
+else:
+    saved = [ideas.from_story(c) for c in _stream(24 * 7, include_offtopic=True) if c["status"] == "saved"]
+    saved_b = [b for b in ideas.load_briefs(since_hours=24 * 30) if b["status"] == "saved"]
+    items = saved_b + sorted(saved, key=lambda x: x["newest"], reverse=True)
+    if not items:
+        st.info("Nothing saved yet. Press ☆ Save on any idea.", icon="⭐")
+    grid(items, "saved")

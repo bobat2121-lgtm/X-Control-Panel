@@ -180,4 +180,4 @@ def _alert(slot: str, spec: dict, drafts: list[db.Draft], sc_panel: str | None, 
                        f"{stats['collect'].get('filings_new', 0)} filings · {stats['collect'].get('news_new', 0)} news")]
     if stats["collect"].get("errors"):
         fields.append(("Warnings", "; ".join(stats["collect"]["errors"])[:1000]))
-    notify.discord(title, "\n\n".join(desc_lines), fields)
+    notify.discord(title, "\n\n".join(desc_lines), fields, kind="drafts")

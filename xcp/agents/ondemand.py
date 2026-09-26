@@ -340,7 +340,8 @@ def h_showcase_captions(p: dict) -> dict:
         for label, text in made:
             link = xtext.intent_post(text.split(xtext.THREAD_SEP)[0])
             fields.append((f"Option {label}", text[:900] + (f"\n[🚀 Open X]({link})" if len(link) < 1000 else "")))
-        notify.discord(f"✍️ Captions for {run.title}", "Attach the image from the 🟢 message (or the Feed).", fields)
+        notify.discord(f"✍️ Captions for {run.title}", "Attach the image from the 🟢 message (or the Feed).", fields,
+                       kind="drafts")
     return {"draft_id": d.id, "variants": len(made), "flags": len(flags)}
 
 

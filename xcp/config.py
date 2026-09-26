@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import os
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -48,11 +49,32 @@ def deep_merge(base, override):
     return copy.deepcopy(override if override is not None else base)
 
 
-def get(name: str):
-    """settings | pillars | watchlist -> dict ; voice | guidelines -> str"""
+OVERRIDE_TTL = 20.0  # seconds; a page render reads settings hundreds of times, the DB only needs asking once
+_overrides: dict[str, tuple[float, object]] = {}
+
+
+def _override(name: str):
+    hit = _overrides.get(name)
+    if hit and time.monotonic() - hit[0] < OVERRIDE_TTL:
+        return hit[1]
     from xcp import db
 
-    override = db.kv_get(f"config:{name}")
+    value = db.kv_get(f"config:{name}")
+    _overrides[name] = (time.monotonic(), value)
+    return value
+
+
+def forget(key: str | None = None) -> None:
+    """Drop cached DB overrides (all, or the one behind kv key 'config:<name>')."""
+    if key is None:
+        _overrides.clear()
+    elif key.startswith("config:"):
+        _overrides.pop(key.split(":", 1)[1], None)
+
+
+def get(name: str):
+    """settings | pillars | watchlist -> dict ; voice | guidelines -> str"""
+    override = copy.deepcopy(_override(name))
     if name in TEXT_DOCS:
         return override if isinstance(override, str) and override.strip() else _text_default(name)
     default = _yaml(name)

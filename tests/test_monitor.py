@@ -69,6 +69,11 @@ class Stories(Base):
         by_title = {c["title"][:20]: c for c in monitor.stream(hours=2)}
         fed = next(c for t, c in by_title.items() if t.startswith("Fed proposes"))
         self.assertEqual(fed["publishers"], 3)
+        with mock.patch.object(monitor.notify, "discord") as ping,                 mock.patch.object(monitor, "_quiet", return_value=False):
+            monitor.evaluate(ids)
+        self.assertEqual(ping.call_count, 0)  # news pings are off by default: only showcase go-lives reach Discord
+        db.kv_set("config:settings", {"alerts": {"discord": ["showcase_ready", "news_priority"]}})
+        db.kv_delete(monitor.PINGED)
         with mock.patch.object(monitor.notify, "discord") as ping, \
                 mock.patch.object(monitor, "_quiet", return_value=False):
             events = monitor.evaluate(ids)
@@ -96,6 +101,7 @@ class Stories(Base):
             self.assertTrue(monitor.priority_reason(sue).startswith("Breaking (sues)"))
 
     def test_pings_respect_quiet_hours_freshness_and_hourly_limit(self):
+        db.kv_set("config:settings", {"alerts": {"discord": ["news_priority"]}})  # switched on for this test
         with db.session() as s:
             old = _news(s, "o", "Senate passes stablecoin bill", "AP", minutes_ago=600)
             fresh = [_news(s, f"p{i}", f"Senate passes stablecoin bill number {i} amendment {i*7}", f"Outlet{i}")
@@ -142,6 +148,7 @@ class Desk(Base):
             self.assertTrue(all(b.sources and b.sources[0]["url"] for b in briefs))
             self.assertEqual(s.query(db.Draft).count(), before)  # no AI drafts in monitor mode
         digest.assert_called_once()
+        self.assertEqual(digest.call_args.kwargs["kind"], "desk")  # held back from Discord unless switched on
 
     def test_slots_route_to_the_desk_in_monitor_mode(self):
         from xcp import scheduler

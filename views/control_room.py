@@ -113,7 +113,7 @@ with t_agents:
         st.dataframe([{"id": r.id, "kind": r.kind, "status": r.status, "created": fmt_ny(r.created_at),
                        "error": r.error or ""} for r in reqs], hide_index=True, width="stretch")
     if st.button("🔔 Send a test Discord alert"):
-        ok = notify.discord("✅ Test from X Control Panel", "If you can read this, alerts work.")
+        ok = notify.discord("✅ Test from X Control Panel", "If you can read this, alerts work.", kind="test")
         st.toast("Sent" if ok else "Not sent: DISCORD_WEBHOOK_URL is missing in this app's secrets",
                  icon="🔔" if ok else "⚠️")
 
@@ -218,11 +218,19 @@ with t_settings:
                                                 "drafts": "✍️ Drafts: the agents also write posts"}[m],
         help="Monitor = the slots write desk briefs (what happened, why it matters, numbers, angle questions). "
              "Drafts = the original mode, with AI-written post options. Switch back any time.")
-    mon = settings.get("monitor", {})
-    c = st.columns(2)
-    new.setdefault("monitor", {})["ping"] = c[0].toggle("⚡ Discord pings for priority news", bool(mon.get("ping", True)))
-    new["monitor"]["watchlist_digest_minutes"] = c[1].number_input(
-        "🎙 Watchlist digest every N minutes (0 = off)", 0, 240, int(mon.get("watchlist_digest_minutes", 30)), step=15)
+    kinds_on = settings.get("alerts", {}).get("discord", notify.DEFAULT_KINDS)
+    new.setdefault("alerts", {})["discord"] = st.multiselect(
+        "Discord pings for", list(notify.KINDS), default=[k for k in kinds_on if k in notify.KINDS],
+        format_func=notify.KINDS.get,
+        help="Only these reach Discord. Everything else stays in the panel; the newest held alert of each kind is "
+             "listed below.")
+    held = [(k, db.kv_get(f"notify:held:{k}")) for k in notify.KINDS if k not in new["alerts"]["discord"]]
+    held = [(k, h) for k, h in held if h]
+    if held:
+        with st.expander(f"Held back from Discord ({len(held)} kinds)"):
+            st.dataframe([{"kind": notify.KINDS[k], "latest": h.get("title", ""), "when": fmt_ny(parse_iso(h.get("at")))}
+                          for k, h in sorted(held, key=lambda x: x[1].get("at", ""), reverse=True)],
+                         hide_index=True, width="stretch")
 
     st.markdown("**Mix targets (% of posts)**")
     tg = settings["targets"]["pillars"]
@@ -254,7 +262,7 @@ with t_settings:
                "than about an hour, update the cron there too.")
 
     st.markdown("**Showcase panels** (Digital Credit Report). `start`–`deadline` is the watch window (ET); "
-                "`nudge` sends one 'still waiting' ping.")
+                "`nudge` flags it as still waiting (a Discord ping only if 'showcase waits' is switched on above).")
     de_cfg = settings.get("digital_exposure", {})
     sc_rows = [{"panel": k, "title": v.get("title", k), "day": v.get("day", ""), "slot": v.get("slot", ""),
                 "start": v.get("start", ""), "nudge": v.get("nudge", ""), "deadline": v.get("deadline", ""),

@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "test-discord":
         from xcp import notify
 
-        ok = notify.discord("✅ X Control Panel is connected", "Alerts from your agents will land here.")
+        ok = notify.discord("✅ X Control Panel is connected", "Alerts from your agents will land here.", kind="test")
         print("sent" if ok else "not sent (check DISCORD_WEBHOOK_URL)")
         return 0 if ok else 1
     return 1

@@ -20,7 +20,7 @@ A news monitor and research desk for your X account (80% Bitcoin and digital cre
 
 | When | What happens |
 |---|---|
-| 📡 every ~15 min | **Monitor**: your watchlist on X, news feeds (Cointelegraph, CoinDesk, The Block, Decrypt, Bitcoin Magazine, The Defiant), SEC/CFTC/Fed press, Google News topics (digital credit, stablecoins, legislation, AI × stablecoins, frontier and physical AI) and SEC 8-Ks. Groups the same story across outlets; ⚡ pings for priority news; 🎙 a digest of your accounts' new posts every 30 min |
+| 📡 every ~15 min | **Monitor**: your watchlist on X, news feeds (Cointelegraph, CoinDesk, The Block, Decrypt, Bitcoin Magazine, The Defiant), SEC/CFTC/Fed press, Google News topics (digital credit, stablecoins, legislation, AI × stablecoins, frontier and physical AI) and SEC 8-Ks. Groups the same story across outlets and flags ⚡ priority news on the Monitor page (no Discord pings unless you switch them on) |
 | ☀️ 7:05 Mon–Fri | Pre-market desk brief for your 8:00 post (Drafts mode: post drafts) |
 | 🧾 Mon 7:40–11:30 | **Showcase: The Accretion Ledger.** Waits for both weekly 8-Ks, then renders, audits and drafts it (usually 8:10–8:30). Tuesday after an EDGAR Monday holiday |
 | 🤖 11:20 daily | AI-lane desk brief for noon (posting is optional) |
@@ -39,7 +39,7 @@ A news monitor and research desk for your X account (80% Bitcoin and digital cre
 - **Friday:** it's past 4:00 pm plus 10 minutes, the panel has rolled to this week, and today's closes and the BTC 4 pm mark are in.
 - **Every day:** digital-exposure's audit has 0 FAIL, and no source used by that image fell back to a saved snapshot. The image has no blank values or text overflow, and is 1440 wide and no taller than 3:4.
 
-"Not yet" results retry every few minutes. A real problem (an image figure that disagrees with the 8-K, a FAIL) pings Discord. If digital-exposure's `main` stops rendering, the watcher uses the last commit that rendered cleanly and says so.
+"Not yet" results retry every few minutes. A real problem (an image figure that disagrees with the 8-K, a FAIL) shows in Control Room → Showcase (and in Discord only if you switch on "showcase waits"). If digital-exposure's `main` stops rendering, the watcher uses the last commit that rendered cleanly and says so.
 
 ## Try it locally (no keys needed)
 
@@ -92,7 +92,7 @@ Repo → Settings → Secrets and variables → Actions:
 | `DATABASE_URL` | from step 2 |
 | `CODEX_AUTH_KEY` | from step 4 |
 | `X_BEARER_TOKEN` | from step 3 |
-| `DISCORD_WEBHOOK_URL` | your Discord webhook |
+| `DISCORD_WEBHOOK_URL` | your Discord webhook (by default it only gets a ping when a Digital Credit Report panel goes live for its post time; Control Room → Settings → "Discord pings for" adds more) |
 | `SEC_USER_AGENT` | `Your Name you@email.com` (the SEC requires a contact) |
 | `FRED_API_KEY` | optional, [free key](https://fred.stlouisfed.org/docs/api/api_key.html) |
 
@@ -107,7 +107,7 @@ At [share.streamlit.io](https://share.streamlit.io), click **Create app**, pick 
 For instant rewrites and "Run now", create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with access to **only this repo** and the **Actions: Read and write** permission. Use it as `GH_DISPATCH_TOKEN`. Without it, button requests wait for the next scheduled run.
 
 ### 7. First run
-Actions → **agent** → Run workflow → job `premarket`. About 3 minutes later there are drafts in the Feed and a ping in Discord.
+Actions → **agent** → Run workflow → job `premarket`. About 3 minutes later the pre-market desk picks are in the Monitor idea feed.
 
 ### 8. Showcase (Digital Credit Report)
 Nothing to set up: the **showcase** workflow uses the same `DATABASE_URL` and `DISCORD_WEBHOOK_URL` secrets and reads the public digital-exposure repo. To test it any time: Actions → **showcase** → Run workflow → mode `preflight` (renders all three panels, posts nothing), or Control Room → 🛠 Showcase → 🧪 Preflight. Windows and titles are in Control Room → Settings → Showcase panels.
@@ -117,7 +117,7 @@ The old Build Lab gallery (`showcase_gallery/`) is no longer in the showcase rot
 ---
 
 ## Daily use
-- **Monitor** (home page): ⚡ priority strip, the 🗞 live stream (filters for topic, window, source, search; refreshes every minute), 🧠 desk briefs, 🎙 your 7 accounts, ⭐ saved. **✍️ Write** opens a box next to the source: write your take, open it in X (quote post for X sources), or save it to the Feed. X reads stay under the monthly cap, with a share reserved for your watchlist so keyword searches can't crowd it out.
+- **Monitor** (home page): the 🗞 **idea feed** puts post ideas three to a row under each post time (up next first; category pills and ⚡ priority-only filter). Each idea is a header saying what the post is on; click it and it opens full width: what happened, why it matters, the numbers, ways in, every news item with its source underneath, and related coverage. Write next to it, or press ↗ Writer tab to pin it beside a bigger editor (✍️ Writer keeps pins and your text). ☆ Save or ✕ Pass on each. Also 📡 Live wire (every story, refreshes every minute), 🎙 Your 7 (plus replies worth making) and ⭐ Saved. X reads stay under the monthly cap, with a share reserved for your watchlist so keyword searches can't crowd it out.
 - **Feed:** pick option A/B/C and edit inline (it saves automatically). Use one-click AI rewrites, 🚀 Post on X (opens X's composer), then ✅ Posted with the URL.
 - **Showcase days:** the 🟢 Discord message carries the audited image and caption A (facts only, taken from the image). Options B–D with more voice follow a couple of minutes later. Save the image, open X with the caption, and attach it. The Feed card has the same image with a Download button and a 🔄 Re-check.
 - **Build Lab:** 🧩 copy the build prompt into Claude Code or Codex. **Add launch draft** puts a finished build's post in any slot.

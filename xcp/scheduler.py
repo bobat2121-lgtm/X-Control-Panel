@@ -79,7 +79,7 @@ def run_job(name: str, trigger: str = "schedule", fn=None) -> dict:
         status = "error"
         stats = {"error": str(e)[:500]}
         log.error("job %s failed:\n%s", name, traceback.format_exc())
-        notify.discord(f"❌ {name} failed", str(e)[:1500], color=0xE74C3C)
+        notify.discord(f"❌ {name} failed", str(e)[:1500], color=0xE74C3C, kind="errors")
     finally:
         logging.getLogger().removeHandler(handler)
         with db.session() as s:

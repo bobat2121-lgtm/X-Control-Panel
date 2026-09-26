@@ -197,12 +197,12 @@ def _alert_ready(run: db.ShowcaseRun, draft_id: int, note: str) -> None:
     if len(url) < 1800:
         fields.append(("Post", f"[🚀 Open X with caption A]({url}) (attach the image)"))
     notify.discord(f"🟢 {run.title} ready", "\n\n".join(x for x in desc if x), fields, color=GREEN,
-                   image=run.png, image_name=f"{run.panel}.png")
+                   image=run.png, image_name=f"{run.panel}.png", kind="showcase_ready")
 
 
 def _alert(run_id: int, key: str, title: str, text: str, color: int, quiet: bool) -> None:
     if not quiet and _mark(run_id, key):
-        notify.discord(title, text, color=color)
+        notify.discord(title, text, color=color, kind="showcase_status")
 
 
 # ------------------------------------------------------------------ the loop
@@ -354,5 +354,5 @@ def preflight(de_dir: Path, de_python: str, quiet: bool = False) -> dict:
                        f"digital-exposure {r.commit[:7]}:\n{detail}\n\n"
                        + (f"If main is still broken tomorrow, the watcher falls back to {last_good[:7]}, the last "
                           f"commit that rendered cleanly." if last_good else "No earlier clean commit is on record."),
-                       color=RED)
+                       color=RED, kind="showcase_status")
     return out

@@ -142,4 +142,4 @@ def _digest(spec: dict, briefs: list[db.Brief]) -> None:
         fields.append((f"{'⚡' * max(1, b.priority - 1)} {b.title[:200]}",
                        f"{b.what[:450]}" + (f"\n{link}" if link else "")))
     notify.discord(f"🗞 {spec.get('label', 'Desk')} brief: {len(briefs)} stories to write from",
-                   "Your Monitor page has the full briefs, numbers and angle questions.", fields)
+                   "Your Monitor page has the full briefs, numbers and angle questions.", fields, kind="desk")

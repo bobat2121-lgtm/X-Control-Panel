@@ -128,5 +128,5 @@ def weekly() -> dict:
         fields.append(("Last preflight", f"digital-exposure {str(pre.get('commit', ''))[:7]}: " + " · ".join(
             f"{p} {'✅' if x.get('clean') else '⚠️'}" for p, x in (pre.get("panels") or {}).items())
             + (f" · error: {pre['error']}" if pre.get("error") else "")))
-    notify.discord("📅 Weekly review + showcase lineup", memo[:3000], fields)
+    notify.discord("📅 Weekly review + showcase lineup", memo[:3000], fields, kind="weekly")
     return {"ideas": len(ids)}

@@ -268,6 +268,7 @@ class Watcher(unittest.TestCase):
         self.assertIsNone(req)  # monitor mode (the default): you write the captions, no AI request
         self.assertEqual(len(sent), 1)
         self.assertEqual(sent[0][1]["image_name"], "monday.png")  # the image rides along in Discord
+        self.assertEqual(sent[0][1]["kind"], "showcase_ready")  # the one alert that reaches Discord by default
 
     def test_old_edition_waits_and_records_why(self):
         old = set_value(set_value(AUDIT, "monday", "MSTR balance date", "2026-09-13"),
