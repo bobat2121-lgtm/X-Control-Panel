@@ -321,9 +321,9 @@ def tile(idea: dict, where: str) -> None:
                     f'{esc_html(topic)}</div>', unsafe_allow_html=True)
         chips = _chips(idea)
         if chips:
-            st.markdown(chips, unsafe_allow_html=True)
+            st.markdown(f"<div class='xcp-chips'>{chips}</div>", unsafe_allow_html=True)
         title = idea["title"] if len(idea["title"]) <= 150 else idea["title"][:147].rstrip() + "…"
-        st.button(("▴ " if is_open else "▾ ") + _label_md(title), key=f"ih_{where}_{safe}", on_click=_toggle,
+        st.button(_label_md(title), key=f"ih_{where}_{safe}", on_click=_toggle,
                   args=(k,), width="stretch", help="Close" if is_open else "Open the news, numbers and sources")
         st.markdown(f"<div class='xcp-muted'>{esc_html(_meta(idea))}</div>", unsafe_allow_html=True)
         if owner:
@@ -456,7 +456,6 @@ cut12, cut24 = utcnow() - timedelta(hours=12), utcnow() - timedelta(hours=24)
 _pri = sum(1 for c in stories72 if c["priority"] and c["status"] != "hidden" and c["newest"] >= cut12)
 _watch24 = sum(1 for c in stories72 if c["lead"].kind == "x_post" and (c["lead"].meta or {}).get("watchlist")
                and c["newest"] >= cut24)
-_latest = sorted((c for c in stories72 if c["newest"] >= cut12), key=lambda c: c["newest"], reverse=True)[:14]
 _n_sources = len(monitor.feeds()) + len(monitor.watchlist_handles()) + 2
 hero("MONITOR.EXE", "Ideas for your <em>next post</em>.",
      "Ideas sit under the times you post. Open one to see the news, the numbers and every source full width, "
@@ -466,9 +465,7 @@ hero("MONITOR.EXE", "Ideas for your <em>next post</em>.",
             (len(groups.get(nxt["key"], [])) if nxt else 0, "ideas for it"),
             (_pri, "⚡ priority · 12h", _pri > 0), (_watch24, "🎙 your 7 · 24h")],
      kicker=(f"live wire · checked {fmt_ago(parse_iso(last['at']))} · {_n_sources} sources" if last.get("at")
-             else f"live wire · {_n_sources} sources"),
-     ticker=[("NEW:" if c["first_seen"] and utcnow() - c["first_seen"] < timedelta(minutes=30) else "")
-             + c["title"][:110] for c in _latest], icon="📡")
+             else f"live wire · {_n_sources} sources"), icon="📡")
 if owner:
     tb = st.columns([5, 1.3])
     tb[0].caption(f"Last check: {last.get('news_new', 0)} new stories · {last.get('x_new', 0)} new posts from your "
@@ -484,7 +481,7 @@ view = st.segmented_control("View", VIEWS, key="mon_view", required=True, label_
 
 # ------------------------------------------------------------------ 🗞 idea feed
 if view == VIEWS[0]:
-    f = st.columns([5, 1.3, 1])
+    f = st.columns([4.6, 1.7, 1])
     cats = f[0].pills("Categories", CATS, format_func=CAT_LABEL.get, selection_mode="multi", key="if_cats")
     pri_only = f[1].toggle("⚡ Priority only", key="if_pri")
     f[2].button("↻ Refresh", on_click=_bust, width="stretch", key="if_ref")

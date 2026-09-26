@@ -37,14 +37,12 @@ for p in posts:
 df = pd.DataFrame(rows)
 
 _eng = df["eng_rate"].dropna().mean() if len(df) and df["eng_rate"].notna().any() else None
-_best = df.sort_values("impressions", ascending=False).head(6) if len(df) else df
 hero("SCOREBOARD.EXE", "What's <em>working</em>.",
      "Your posts, their reach, and whether you're on the 80/20 mix. Your X posts are imported nightly.",
      stats=[(len(df), f"posts · {days}d"), (f"{df['impressions'].mean():,.0f}" if len(df) else "—", "avg impressions"),
             (f"{_eng:.2f}%" if _eng is not None else "—", "avg engagement", bool(_eng and _eng >= 3)),
             (f"{sum(1 for p in posts if p.draft_id)}/{len(posts)}" if posts else "—", "written in the panel")],
-     kicker=f"{days}-day window", icon="📊",
-     ticker=[f"{r.impressions:,} views · {r.text[:90]}" for r in _best.itertuples()] if len(df) else [])
+     kicker=f"{days}-day window", icon="📊")
 st.segmented_control("Window", [7, 14, 30, 90], default=30, format_func=lambda d: f"{d}d", key="sb_days")
 
 if df.empty:

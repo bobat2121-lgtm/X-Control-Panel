@@ -20,7 +20,7 @@ A news monitor and research desk for your X account (80% Bitcoin and digital cre
 
 | When | What happens |
 |---|---|
-| 📡 every ~15 min | **Monitor**: your watchlist on X, news feeds (Cointelegraph, CoinDesk, The Block, Decrypt, Bitcoin Magazine, The Defiant), SEC/CFTC/Fed press, Google News topics (digital credit, stablecoins, legislation, AI × stablecoins, frontier and physical AI) and SEC 8-Ks. Groups the same story across outlets and flags ⚡ priority news on the Monitor page (no Discord pings unless you switch them on) |
+| 📡 every ~15 min | **Monitor**: your watchlist on X, news feeds (Cointelegraph, CoinDesk, The Block, Decrypt, Bitcoin Magazine, The Defiant), SEC/CFTC/Fed press, Google News topics (digital credit, stablecoins, legislation, AI × stablecoins, frontier and physical AI) and SEC 8-Ks. Groups the same story across outlets and flags ⚡ priority news on the Monitor page (no Discord pings unless you switch them on). GitHub cron can run hours late, so an open panel also dispatches it whenever news is over 20 minutes old |
 | ☀️ 7:05 Mon–Fri | Pre-market desk brief for your 8:00 post (Drafts mode: post drafts) |
 | 🧾 Mon 7:40–11:30 | **Showcase: The Accretion Ledger.** Waits for both weekly 8-Ks, then renders, audits and drafts it (usually 8:10–8:30). Tuesday after an EDGAR Monday holiday |
 | 🤖 11:20 daily | AI-lane desk brief for noon (posting is optional) |

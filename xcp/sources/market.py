@@ -279,6 +279,21 @@ def _inputs(m: dict) -> tuple[dict, dict]:
     return m, provenance
 
 
+TAPE_TICKERS = ["MSTR", "ASST", "STRC", "SATA", "^TNX", "DX-Y.NYB"]
+
+
+def quotes(tickers: list[str] | None = None) -> dict:
+    """Live prices for the panel's moving tape: BTC, a few tickers, Fear & Greed (about 1-2 s, nothing saved)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(3) as ex:
+        fb = ex.submit(btc)
+        fe = ex.submit(equities, list(tickers or TAPE_TICKERS))
+        ff = ex.submit(fear_greed)
+        return {"as_of": utcnow().isoformat(), "btc": fb.result(), "equities": fe.result(),
+                "fear_greed": ff.result()}
+
+
 def take_snapshot(save: bool = True) -> dict:
     st = config.settings()
     m, provenance = _inputs(st.get("market", {}))

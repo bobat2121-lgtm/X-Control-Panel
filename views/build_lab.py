@@ -143,15 +143,12 @@ with db.session() as s:
 
 live = [i for i in ideas if i.status != "archived"]
 _count = {k: sum(1 for i in ideas if i.status == k) for k in STATUSES}
-_lineup = showcase.lineup(14)
 hero("BUILDLAB.EXE", "Ideas worth <em>building</em>.",
      "Creations the Strategist proposes from what's surfacing and what performs, each with a build prompt you can "
      "paste into Claude Code or Codex.",
      stats=[(_count["inbox"], "💡 inbox"), (_count["shortlist"], "⭐ shortlist"),
             (_count["building"], "🔨 building", _count["building"] > 0), (_count["shipped"], "🚢 shipped")],
-     kicker=f"{len(live)} live ideas · showcase panels Mon / Wed / Fri",
-     ticker=[f"{r['date']:%a %b %d}: {r['title']} ({r['label']} · post {r['post']})" for r in _lineup],
-     icon="🛠")
+     kicker=f"{len(live)} live ideas · showcase panels Mon / Wed / Fri", icon="🛠")
 
 # --- showcase lineup (fixed: the Digital Credit Report panels, audited before each post)
 section("Showcase lineup", "your Digital Credit Report panels")

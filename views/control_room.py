@@ -34,7 +34,6 @@ _lim = settings.get("limits", {})
 _reads, _cap = x_reads_this_month(), int(_lim.get("x_monthly_post_cap", 4000))
 _mon = db.kv_get("monitor:last_run") or {}
 with db.session() as _s:
-    _recent = list(_s.scalars(select(db.Run).where(db.Run.job != "monitor").order_by(db.Run.started_at.desc()).limit(8)).all())
     _queued = len(db.pending_requests(_s))
 _mode = settings.get("writer", {}).get("mode", "monitor")
 hero("CONTROLROOM.EXE", "The <em>engine room</em>.",
@@ -43,9 +42,7 @@ hero("CONTROLROOM.EXE", "The <em>engine room</em>.",
             (fmt_ago(parse_iso(_mon.get("at"))) if _mon.get("at") else "—", "monitor last ran"),
             ("Monitor" if _mode == "monitor" else "Drafts", "writer mode"),
             (_queued, "AI requests queued", _queued > 0)],
-     kicker=f"≈ ${_reads * 0.005:.2f} of ${_cap * 0.005:.0f} X budget used", icon="⚙️",
-     ticker=[f"{'✅' if r.status == 'ok' else '❌' if r.status == 'error' else '⏳'} {r.job} · {fmt_ny(r.started_at)}"
-             for r in _recent])
+     kicker=f"≈ ${_reads * 0.005:.2f} of ${_cap * 0.005:.0f} X budget used", icon="⚙️")
 t_agents, t_show, t_settings, t_watch, t_voice, t_style, t_market, t_cal = st.tabs(
     ["🛰 Agents", "🛠 Showcase", "⚙️ Settings", "👀 Watchlist", "🗣 Voice & rules", "📚 Style library",
      "💹 Market inputs", "📅 Calendar"])
