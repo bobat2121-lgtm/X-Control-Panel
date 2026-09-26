@@ -99,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
         if not (de_dir / "scripts" / "render_previews.py").exists():
             print(f"digital-exposure checkout not found at {de_dir}", file=sys.stderr)
             return 1
+        if Path(args.de_python).exists():  # its scripts run with cwd=de_dir, so a relative path would break
+            args.de_python = str(Path(args.de_python).resolve())
         if args.mode == "preflight":
             fn = lambda: showcase_watch.preflight(de_dir, args.de_python, quiet=args.quiet)  # noqa: E731
             name = "showcase:preflight"
@@ -109,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         trigger = "manual" if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" else "schedule"
         r = scheduler.run_job(name, trigger=trigger, fn=fn)
         print(json.dumps(r, indent=1, default=str))
-        return 0 if r.get("status") == "ok" else 1
+        return 0 if r.get("status") == "ok" and not r.get("error") else 1
 
     if args.cmd == "seed-demo":
         from jobs.demo import seed
