@@ -37,19 +37,19 @@ x_searches:
   - name: digital_credit
     lane: btc
     query: '($STRC OR $SATA OR $STRF OR $STRK OR $STRD OR "digital credit" OR "Stretch preferred") -is:retweet lang:en'
-    max: 60
+    max: 20
   - name: strategy_strive
     lane: btc
     query: '($MSTR OR $ASST OR Saylor OR "Strive") (bitcoin OR BTC OR preferred) -is:retweet -is:reply lang:en'
-    max: 40
+    max: 10
   - name: ai_frontier
     lane: ai
     query: '("new model" OR "SWE-bench" OR "ARC-AGI" OR "open weights" OR benchmark) (OpenAI OR Anthropic OR Gemini OR xAI OR DeepSeek OR Qwen) -is:retweet -is:reply lang:en'
-    max: 40
+    max: 15
   - name: physical_ai
     lane: ai
     query: '(robotaxi OR humanoid OR "self-driving truck" OR "autonomous trucking" OR Optimus) -is:retweet -is:reply lang:en'
-    max: 30
+    max: 10
 
 rss:
   - {name: CoinDesk, lane: btc, url: "https://www.coindesk.com/arc/outboundfeeds/rss/"}

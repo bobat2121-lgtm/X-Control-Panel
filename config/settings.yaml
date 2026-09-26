@@ -59,8 +59,9 @@ targets:
   tones: {analytical: 50, timely: 30, funny: 20}
 
 limits:
-  x_max_posts_per_run: 300     # hard cap on X API post reads per agent run
-  x_daily_post_cap: 900        # hard cap per day (~$4.50 at $0.005/post)
+  x_max_posts_per_run: 100     # hard cap on X API post reads per agent run
+  x_daily_post_cap: 200        # hard cap per day (~$1 at $0.005/post)
+  x_monthly_post_cap: 4000     # hard cap per month (~$20); manual style refreshes excluded
   items_to_llm: 120            # how many scanned items the writer sees per slot
   item_text_chars: 600
   include_watchlist_replies: false

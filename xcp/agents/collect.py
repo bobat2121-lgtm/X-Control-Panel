@@ -77,17 +77,27 @@ def upsert_item(s, *, id: str, kind: str, source: str, text: str, url: str = "",
 
 # ------------------------------------------------------------------ X budget
 
-def x_reads_today() -> int:
+def _x_reads_since(first_day: str) -> int:
+    """Scheduled/on-demand X reads since a NY date. Manual style refreshes are excluded (own cap)."""
     with db.session() as s:
         return int(s.scalar(select(func.coalesce(func.sum(db.Run.x_reads), 0)).where(
-            db.Run.run_date == today_ny().isoformat(), db.Run.job != "style_refresh")) or 0)  # refreshes have own cap
+            db.Run.run_date >= first_day, db.Run.job != "style_refresh")) or 0)
+
+
+def x_reads_today() -> int:
+    return _x_reads_since(today_ny().isoformat())
+
+
+def x_reads_this_month() -> int:
+    return _x_reads_since(today_ny().replace(day=1).isoformat())
 
 
 def x_budget() -> int:
     lim = config.settings().get("limits", {})
-    per_run = int(lim.get("x_max_posts_per_run", 300))
-    daily = int(lim.get("x_daily_post_cap", 900))
-    return max(0, min(per_run, daily - x_reads_today()))
+    per_run = int(lim.get("x_max_posts_per_run", 100))
+    daily = int(lim.get("x_daily_post_cap", 200))
+    monthly = int(lim.get("x_monthly_post_cap", 4000))
+    return max(0, min(per_run, daily - x_reads_today(), monthly - x_reads_this_month()))
 
 
 # ------------------------------------------------------------------ collection

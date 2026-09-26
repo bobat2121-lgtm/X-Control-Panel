@@ -92,14 +92,18 @@ def import_own_posts(days: int = 8) -> dict:
     handle = (config.settings().get("account", {}).get("handle") or "").lstrip("@")
     if not handle or not x_api.configured():
         return {"skipped": "set account.handle and X_BEARER_TOKEN to track your posts", "x_reads": 0}
-    from xcp.agents.collect import classify
+    from xcp.agents.collect import classify, x_budget
+
+    budget = x_budget()
+    if budget < 5:
+        return {"skipped": "X read budget reached (daily or monthly cap)", "x_reads": 0}
 
     client = x_api.XClient()
-    uid = db.kv_get(f"x_user_id:{handle}")
+    uid = db.kv_get(f"x_user_id:{handle.lower()}")  # shared with the style refresh cache
     if not uid:
         uid = client.user_id(handle)
-        db.kv_set(f"x_user_id:{handle}", uid)
-    posts = client.user_posts(uid, max_posts=60, since=utcnow() - timedelta(days=days))
+        db.kv_set(f"x_user_id:{handle.lower()}", uid)
+    posts = client.user_posts(uid, max_posts=min(60, budget), since=utcnow() - timedelta(days=days))
     new = 0
     with db.session() as s:
         for p in posts:

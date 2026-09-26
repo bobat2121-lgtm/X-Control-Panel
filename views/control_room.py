@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from panel.common import enqueue, is_owner
 from xcp import config, db, notify
-from xcp.agents.collect import x_reads_today
+from xcp.agents.collect import x_reads_this_month, x_reads_today
 from xcp.config import env
 from xcp.timeutil import fmt_ny, today_ny
 
@@ -50,8 +50,11 @@ with t_agents:
         col.markdown(f"{'🟢' if ok else '🟡'} **{name}**  \n<span class='xcp-muted'>{val}</span>", unsafe_allow_html=True)
 
     lim = settings.get("limits", {})
-    st.caption(f"X API reads today: {x_reads_today()} / {lim.get('x_daily_post_cap', 900)} cap "
-               f"(≈ \\${x_reads_today() * 0.005:.2f} at \\$0.005/post)")
+    month_reads, month_cap = x_reads_this_month(), int(lim.get("x_monthly_post_cap", 4000))
+    st.caption(f"X API reads · today: {x_reads_today()} / {lim.get('x_daily_post_cap', 200)} · this month: "
+               f"{month_reads} / {month_cap} (≈ \\${month_reads * 0.005:.2f} of \\${month_cap * 0.005:.0f} cap, "
+               f"\\$0.005/post; manual style refreshes excluded)")
+    st.progress(min(month_reads / month_cap, 1.0) if month_cap else 0.0)
 
     st.markdown("#### Run now")
     jobs = list(settings["slots"]) + ["nightly", "weekly", "snapshot", "style_refresh"]
@@ -125,10 +128,13 @@ with t_settings:
     new["showcase"] = [{"day": r["day"], "slot": r["slot"]} for _, r in sc.iterrows() if r.get("day") and r.get("slot")]
 
     st.markdown("**Limits**")
-    c = st.columns(3)
-    new["limits"]["x_max_posts_per_run"] = c[0].number_input("X reads per run", 0, 5000, int(lim.get("x_max_posts_per_run", 300)))
-    new["limits"]["x_daily_post_cap"] = c[1].number_input("X reads per day", 0, 20000, int(lim.get("x_daily_post_cap", 900)))
-    new["limits"]["items_to_llm"] = c[2].number_input("Items shown to the writer", 20, 400, int(lim.get("items_to_llm", 120)))
+    c = st.columns(4)
+    new["limits"]["x_max_posts_per_run"] = c[0].number_input("X reads per run", 0, 5000, int(lim.get("x_max_posts_per_run", 100)))
+    new["limits"]["x_daily_post_cap"] = c[1].number_input("X reads per day", 0, 20000, int(lim.get("x_daily_post_cap", 200)))
+    new["limits"]["x_monthly_post_cap"] = c[2].number_input("X reads per month", 0, 200000,
+                                                            int(lim.get("x_monthly_post_cap", 4000)),
+                                                            help="4,000 ≈ $20 at $0.005/post. Manual style refreshes excluded.")
+    new["limits"]["items_to_llm"] = c[3].number_input("Items shown to the writer", 20, 400, int(lim.get("items_to_llm", 120)))
     new["limits"]["include_watchlist_replies"] = st.toggle("Include watchlist accounts' replies",
                                                            bool(lim.get("include_watchlist_replies", False)))
     c = st.columns(3)
