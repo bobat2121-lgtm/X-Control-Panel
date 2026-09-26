@@ -38,6 +38,8 @@ def main(argv: list[str] | None = None) -> int:
     p_up = sub.add_parser("upload-codex-auth")
     p_up.add_argument("--path", default=str(ROOT / ".codex-cloud" / "auth.json"))
     sub.add_parser("test-discord")
+    p_style = sub.add_parser("load-style", help="load style-library entries from a JSON file")
+    p_style.add_argument("path")
     args = ap.parse_args(argv)
 
     if args.cmd == "gen-key":
@@ -85,6 +87,31 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         llm.store_auth(path.read_text(encoding="utf-8"))
         print("Codex login stored (encrypted) in the database.")
+        return 0
+
+    if args.cmd == "load-style":
+        from xcp import db
+
+        entries = json.loads(Path(args.path).read_text(encoding="utf-8"))
+        added = skipped = 0
+        with db.session() as s:
+            existing = {(r.url, r.hook_type) for r in s.query(db.StyleExample).all()}
+            for e in entries:
+                url = e.get("url") or (f"https://x.com/{e['handle']}/status/{e['id']}" if e.get("id") else "")
+                if (url, e.get("hook_type", "")) in existing:
+                    skipped += 1
+                    continue
+                s.add(db.StyleExample(
+                    source=e.get("source", "admired"), handle=e.get("handle", ""), url=url,
+                    format=e.get("format", "short_observation"), length=e.get("length", "short"),
+                    pillar=e.get("pillar", "bitcoin"), hook_type=e.get("hook_type", ""), pattern=e.get("pattern", ""),
+                    skeleton=e.get("skeleton", ""), demo=e.get("demo", ""), why_it_works=e.get("why", ""),
+                    text=e.get("text", "") if e.get("source") == "mine" else "",
+                    metrics={k: e[k] for k in ("likes", "views", "reposts") if k in e},
+                    strength=int(e.get("strength", 7))))
+                added += 1
+            s.commit()
+        print(f"style library: added {added}, skipped {skipped} duplicates")
         return 0
 
     if args.cmd == "test-discord":
