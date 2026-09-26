@@ -107,7 +107,8 @@ def _persist_auth_if_changed(home: Path | None, before: str | None) -> None:
 # ------------------------------------------------------------------ runner
 
 def _run_codex(prompt: str, schema: dict, timeout: int = 900) -> dict:
-    exe = shutil.which("codex")
+    # On Windows npm installs a bare 'codex' shell script next to codex.cmd; only the .cmd is runnable here.
+    exe = (shutil.which("codex.cmd") if os.name == "nt" else None) or shutil.which("codex")
     if not exe:
         raise LLMError("Codex CLI not found. Install with: npm install -g @openai/codex")
     home = _codex_home()
