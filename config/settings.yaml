@@ -82,4 +82,5 @@ market:
 
 llm:
   backend: codex      # codex (your ChatGPT account via Codex CLI) | mock (offline testing)
-  codex_model: ""     # blank = Codex default model
+  codex_model: ""     # blank = Codex default model (e.g. gpt-6-sol, gpt-6-astra, gpt-6-luna)
+  reasoning_effort: "" # blank = model default; low | medium | high | xhigh

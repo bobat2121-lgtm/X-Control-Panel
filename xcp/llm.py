@@ -119,8 +119,12 @@ def _run_codex(prompt: str, schema: dict, timeout: int = 900) -> dict:
     if home is not None:
         run_env["CODEX_HOME"] = str(home)
 
-    model = env("CODEX_MODEL") or config.settings().get("llm", {}).get("codex_model") or ""
+    llm_cfg = config.settings().get("llm", {})
+    model = env("CODEX_MODEL") or llm_cfg.get("codex_model") or ""
+    effort = env("CODEX_REASONING_EFFORT") or llm_cfg.get("reasoning_effort") or ""
     extra = shlex.split(env("CODEX_EXTRA_ARGS", "") or "")
+    if effort:  # unquoted value: Codex falls back to a raw string, which avoids shell-quoting issues on Windows
+        extra = ["-c", f"model_reasoning_effort={effort}"] + extra
     last_err = ""
     try:
         for attempt in (1, 2):

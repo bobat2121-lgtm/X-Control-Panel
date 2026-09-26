@@ -131,7 +131,7 @@ with t_settings:
     new["limits"]["items_to_llm"] = c[2].number_input("Items shown to the writer", 20, 400, int(lim.get("items_to_llm", 120)))
     new["limits"]["include_watchlist_replies"] = st.toggle("Include watchlist accounts' replies",
                                                            bool(lim.get("include_watchlist_replies", False)))
-    c = st.columns(2)
+    c = st.columns(3)
     new["llm"]["backend"] = c[0].selectbox("LLM backend", ["codex", "mock"],
                                            index=["codex", "mock"].index(settings["llm"].get("backend", "codex")))
     cur_model = settings["llm"].get("codex_model", "") or ""
@@ -140,6 +140,12 @@ with t_settings:
         "Codex model (writes every draft)", model_opts, index=model_opts.index(cur_model),
         format_func=lambda m: CODEX_MODELS.get(m, f"{m} (custom)"),
         help="Uses your ChatGPT plan's Codex limits. Heavier models use more of your plan's allowance.")
+    efforts = {"": "Model default", "low": "low: fastest", "medium": "medium", "high": "high: more careful writing",
+               "xhigh": "xhigh: slowest, heaviest on limits"}
+    cur_eff = settings["llm"].get("reasoning_effort", "") or ""
+    eff_opts = list(efforts) + ([cur_eff] if cur_eff not in efforts else [])
+    new["llm"]["reasoning_effort"] = c[2].selectbox("Reasoning effort", eff_opts, index=eff_opts.index(cur_eff),
+                                                    format_func=lambda e: efforts.get(e, e))
 
     b = st.columns([1, 1, 4])
     if b[0].button("💾 Save settings", type="primary"):
