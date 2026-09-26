@@ -11,7 +11,7 @@ from functools import lru_cache
 from sqlalchemy import func, select
 
 from xcp import config, db
-from xcp.sources import edgar, rss, x_api
+from xcp.sources import edgar, x_api
 from xcp.timeutil import age_hours, today_ny, utcnow
 
 log = logging.getLogger(__name__)
@@ -24,6 +24,17 @@ def _kw_re(kw: str) -> re.Pattern:
     return re.compile(r"(?<!\w)\$?" + re.escape(kw.lower()) + r"(?!\w)")
 
 
+def topic_hits(text: str) -> dict[str, int]:
+    """Keyword matches per pillar (only pillars with at least one)."""
+    t = (text or "").lower()
+    out = {}
+    for name, spec in config.pillars().items():
+        n = sum(1 for kw in spec.get("keywords", []) if _kw_re(kw).search(t))
+        if n:
+            out[name] = n
+    return out
+
+
 def classify(text: str, lane_hint: str | None = None, pillar_hint: str | None = None) -> tuple[str, str]:
     pillars = config.pillars()
     if pillar_hint and pillar_hint in pillars:
@@ -31,9 +42,10 @@ def classify(text: str, lane_hint: str | None = None, pillar_hint: str | None = 
     t = (text or "").lower()
     best, best_score = None, 0.0
     for name, spec in pillars.items():
-        score = sum(1 for kw in spec.get("keywords", []) if _kw_re(kw).search(t))
-        if lane_hint and spec.get("lane") == lane_hint:
-            score += 0.5
+        hits = sum(1 for kw in spec.get("keywords", []) if _kw_re(kw).search(t))
+        if not hits:  # the lane hint only breaks ties between pillars that actually matched
+            continue
+        score = hits + (0.5 if lane_hint and spec.get("lane") == lane_hint else 0.0)
         if score > best_score:
             best, best_score = name, score
     if best is None:
@@ -68,9 +80,10 @@ def upsert_item(s, *, id: str, kind: str, source: str, text: str, url: str = "",
         row.fetched_at = utcnow()
         return row, False
     lane, pillar = classify(text, lane_hint, pillar_hint)
+    meta = {**(meta or {}), "first_seen": utcnow().isoformat(), "hits": topic_hits(text), "hinted": bool(pillar_hint)}
     row = db.Item(id=id, kind=kind, source=source, text=text, url=url, author=author, author_name=author_name,
                   author_followers=author_followers, created_at=created_at, metrics=metrics or {},
-                  lane=lane, pillar=pillar, score=score, meta=meta or {})
+                  lane=lane, pillar=pillar, score=score, meta=meta)
     s.add(row)
     return row, True
 
@@ -92,11 +105,15 @@ def x_reads_this_month() -> int:
     return _x_reads_since(today_ny().replace(day=1).isoformat())
 
 
-def x_budget() -> int:
+def x_budget(purpose: str = "watchlist") -> int:
+    """X reads this run may spend. Keyword searches can't touch the share reserved for watchlist accounts."""
     lim = config.settings().get("limits", {})
     per_run = int(lim.get("x_max_posts_per_run", 100))
     daily = int(lim.get("x_daily_post_cap", 200))
     monthly = int(lim.get("x_monthly_post_cap", 4000))
+    if purpose == "search":
+        daily -= int(lim.get("x_watchlist_reserve_daily", 0))
+        monthly -= int(lim.get("x_watchlist_reserve_monthly", 0))
     return max(0, min(per_run, daily - x_reads_today(), monthly - x_reads_this_month()))
 
 
@@ -110,7 +127,8 @@ def collect(lane: str | None) -> dict:
 
     # --- X
     if x_api.configured():
-        budget = x_budget()
+        budget = x_budget("watchlist")
+        search_budget = x_budget("search")
         try:
             client = x_api.XClient()
         except x_api.XError as e:
@@ -127,7 +145,7 @@ def collect(lane: str | None) -> dict:
                      for q in cfg.get("x_searches", []) if not lane or q.get("lane") == lane]
             with db.session() as s:
                 for source, query, max_posts, q_lane in jobs:
-                    remaining = budget - client.reads
+                    remaining = (budget if source == "watchlist" else search_budget) - client.reads
                     if remaining < 10:
                         stats["errors"].append("X read budget reached; skipped remaining queries")
                         break
@@ -144,7 +162,7 @@ def collect(lane: str | None) -> dict:
                             author=p["author"], author_name=p["author_name"], author_followers=p["author_followers"],
                             created_at=p["created_at"], metrics=p["metrics"],
                             lane_hint=hint.get("lane") or q_lane or lane, pillar_hint=hint.get("pillar"),
-                            meta={"referenced": p["referenced"]})
+                            meta={"referenced": p["referenced"], "watchlist": source == "watchlist"})
                         stats["x_posts_new"] += int(new)
                     s.commit()
                     if newest:
@@ -153,28 +171,32 @@ def collect(lane: str | None) -> dict:
 
     # --- SEC filings (BTC lane)
     if lane in (None, "btc"):
-        with db.session() as s:
-            for co in cfg.get("edgar", []):
-                for f in edgar.recent_filings(co["cik"], co["name"], co.get("forms", ["8-K"])):
-                    _, new = upsert_item(s, id=f["id"], kind="filing", source=f"edgar:{co['name']}", text=f["text"],
-                                         url=f["url"], author=co["name"], author_name=co["name"],
-                                         created_at=f["accepted"], lane_hint="btc", pillar_hint="digital_credit",
-                                         meta={"form": f["form"], "items": f["items"]})
-                    stats["filings_new"] += int(new)
-            s.commit()
+        stats["filings_new"] = len(ingest_filings())
 
-    # --- RSS
-    with db.session() as s:
-        for feed in cfg.get("rss", []):
-            if lane and feed.get("lane") != lane:
-                continue
-            for e in rss.fetch_feed(feed["name"], feed["url"]):
-                _, new = upsert_item(s, id=e["id"], kind="news", source=feed["name"], text=e["text"], url=e["url"],
-                                     author=feed["name"], author_name=feed["name"], created_at=e["created_at"],
-                                     lane_hint=feed.get("lane"))
-                stats["news_new"] += int(new)
-        s.commit()
+    # --- news feeds and Google News topic searches (shared with the monitor)
+    from xcp.agents import monitor
+
+    stats["news_new"] = len(monitor.ingest_news(lane)["new_ids"])
     return stats
+
+
+def ingest_filings() -> list[str]:
+    """New 8-Ks from the issuers in pillars.yaml (Strategy, Strive). Returns the new item ids."""
+    new_ids = []
+    with db.session() as s:
+        known = set(s.scalars(select(db.Item.id).where(db.Item.kind == "filing",
+                                                       db.Item.fetched_at >= utcnow() - timedelta(days=10))).all())
+        for co in config.get("pillars").get("edgar", []):
+            for f in edgar.recent_filings(co["cik"], co["name"], co.get("forms", ["8-K"]), known=known):
+                row, new = upsert_item(s, id=f["id"], kind="filing", source=f"edgar:{co['name']}", text=f["text"],
+                                       url=f["url"], author=co["name"], author_name=co["name"],
+                                       created_at=f["accepted"], lane_hint="btc", pillar_hint="digital_credit",
+                                       meta={"form": f["form"], "items": f["items"],
+                                             "title": f"{co['name']} filed an {f['form']} (items {f.get('items') or 'n/a'})"})
+                if new:
+                    new_ids.append(row.id)
+        s.commit()
+    return new_ids
 
 
 def select_items(lane: str | None, hours: int = 30, limit: int = 120) -> list[db.Item]:

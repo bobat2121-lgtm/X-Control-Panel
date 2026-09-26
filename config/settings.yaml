@@ -101,6 +101,8 @@ limits:
   x_max_posts_per_run: 100     # hard cap on X API post reads per agent run
   x_daily_post_cap: 200        # hard cap per day (~$1 at $0.005/post)
   x_monthly_post_cap: 4000     # hard cap per month (~$20); manual style refreshes excluded
+  x_watchlist_reserve_daily: 60     # of the daily cap, kept for your watchlist accounts (keyword searches can't use it)
+  x_watchlist_reserve_monthly: 1200 # same for the monthly cap (~25 posts/day from your 7 accounts)
   items_to_llm: 120            # how many scanned items the writer sees per slot
   item_text_chars: 600
   include_watchlist_replies: false
@@ -123,6 +125,30 @@ market:
   strc_annual_rate_pct: null     # STRC dividend rate, reset monthly
   sata_annual_rate_pct: 13.0     # SATA dividend rate (13.00% per May 2026 8-K; verify)
   rates_as_of: "2026-05"
+
+# What the agents do at each slot. monitor = brief you on what's surfacing and you write the posts
+# (Monitor page). drafts = they also write post drafts (the original mode; switch back any time).
+writer:
+  mode: monitor
+
+# The news monitor runs every ~15 minutes (.github/workflows/monitor.yml): feeds, Google News, SEC 8-Ks, and
+# your watchlist on X (only new posts are billed). Priority items ping Discord as they appear.
+monitor:
+  window_hours: 48            # how far back feeds are read
+  x_watchlist: true           # poll your watchlist accounts on every monitor run
+  ping: true
+  ping_max_per_hour: 5
+  quiet_hours: ["23:00", "06:30"]   # no pings overnight (ET); they show in the morning desk brief
+  priority_pillars: [digital_credit, stablecoins, legislation]
+  breaking_words: [passes, passed, "signed into law", signs, approves, approved, rejects, rejected, vote,
+                   hack, exploit, depeg, ruling, lawsuit, sues, charges, halts, emergency, "all-time high",
+                   "record high", launches, files for, acquires, acquired]
+  trending_sources: 3         # same story from this many outlets within 3 hours = priority
+  ping_fresh_hours: 3         # only ping stories published in the last few hours (not old news seen late)
+  # Off your lanes unless the story also hits digital credit, stablecoins or legislation.
+  offlane_words: [XRP, Ripple, Solana, Dogecoin, DOGE, Cardano, memecoin, memecoins, "meme coin", Shiba, PEPE,
+                  Litecoin, Avalanche, Polkadot, TRON, Toncoin, BNB, Hyperliquid, HYPE, Sui, Aptos, Pi Network]
+  watchlist_digest_minutes: 30  # one Discord message with your accounts' new posts, at most this often (0 = off)
 
 # Voice mode. "classic" = the original style mix. "v2" = more of your own posts and only the admired accounts'
 # reasoning (no templates), plus the robot check (em dashes, AI phrases, same-shape lines). Control Room →

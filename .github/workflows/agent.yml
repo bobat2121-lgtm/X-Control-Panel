@@ -97,3 +97,4 @@ jobs:
         run: |
           gh api -X PUT "repos/${{ github.repository }}/actions/workflows/agent.yml/enable"
           gh api -X PUT "repos/${{ github.repository }}/actions/workflows/showcase.yml/enable"
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/monitor.yml/enable"

@@ -237,6 +237,29 @@ class StyleExample(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
 
 
+class Brief(Base):
+    """A desk brief: one story pre-researched for you to write about (the monitor's AI layer)."""
+    __tablename__ = "briefs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    run_slot: Mapped[str] = mapped_column(String(30), default="")
+    run_date: Mapped[str] = mapped_column(String(10), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="story")  # story | reply_target
+    title: Mapped[str] = mapped_column(Text, default="")
+    what: Mapped[str] = mapped_column(Text, default="")  # what happened
+    why: Mapped[str] = mapped_column(Text, default="")  # why it matters for the account
+    numbers: Mapped[list] = mapped_column(JSON, default=list)  # [{label, value, source}]
+    angles: Mapped[list] = mapped_column(JSON, default=list)  # questions that spark your own take
+    pillar: Mapped[str] = mapped_column(String(30), default="bitcoin")
+    lane: Mapped[str] = mapped_column(String(10), default="btc")
+    priority: Mapped[int] = mapped_column(Integer, default=2)  # 3 = post about this now
+    item_ids: Mapped[list] = mapped_column(JSON, default=list)
+    sources: Mapped[list] = mapped_column(JSON, default=list)  # [{title, url, publisher, kind}]
+    flags: Mapped[list] = mapped_column(JSON, default=list)  # numbers the checker couldn't match to a source
+    status: Mapped[str] = mapped_column(String(20), default="new", index=True)  # new | saved | used | dismissed
+    draft_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class ShowcaseRun(Base):
     """One Digital Credit Report panel for one showcase day: every audit attempt, then the image you post."""
     __tablename__ = "showcase_runs"

@@ -411,9 +411,13 @@ if sel_pillars:
 drafts.sort(key=lambda x: (SLOT_ORDER.index(x.slot) if x.slot in SLOT_ORDER else 99, x.kind != "showcase", -x.score))
 
 if not drafts:
-    first_slot = next(iter(SLOTS.values()))
-    st.info(f"No drafts here yet. The agents run on schedule (first slot of the day at {first_slot['run_at']} ET). "
-            f"You can also draft from a link above, or start a run from Control Room.", icon="🛰️")
+    if settings.get("writer", {}).get("mode", "monitor") == "monitor":
+        st.info("No posts here yet. In Monitor mode the Feed holds the posts you write: press ✍️ Write on any story "
+                "or brief on the Monitor page and save it here. Showcase images land here too.", icon="✍️")
+    else:
+        first_slot = next(iter(SLOTS.values()))
+        st.info(f"No drafts here yet. The agents run on schedule (first slot of the day at {first_slot['run_at']} ET). "
+                f"You can also draft from a link above, or start a run from Control Room.", icon="🛰️")
 
 current = None
 for d in drafts:

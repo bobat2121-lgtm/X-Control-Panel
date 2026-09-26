@@ -18,7 +18,9 @@ def _headers() -> dict:
     return {"User-Agent": env("SEC_USER_AGENT", "XControlPanel admin@example.com"), "Accept-Encoding": "gzip"}
 
 
-def recent_filings(cik: int, name: str, forms: list[str], days: int = 4, excerpt_chars: int = 5000) -> list[dict]:
+def recent_filings(cik: int, name: str, forms: list[str], days: int = 4, excerpt_chars: int = 5000,
+                   known: set[str] | None = None) -> list[dict]:
+    """Recent filings. `known` item ids (edgar:<accession>) are skipped without downloading the document."""
     try:
         r = httpx.get(f"https://data.sec.gov/submissions/CIK{int(cik):010d}.json", headers=_headers(), timeout=30)
         r.raise_for_status()
@@ -35,6 +37,8 @@ def recent_filings(cik: int, name: str, forms: list[str], days: int = 4, excerpt
         if not accepted or accepted < cutoff:
             continue
         acc = recent["accessionNumber"][i]
+        if known and f"edgar:{acc}" in known:
+            continue
         doc = recent["primaryDocument"][i]
         url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc.replace('-', '')}/{doc}"
         items = recent.get("items", [""] * (i + 1))[i]

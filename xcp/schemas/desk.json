@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stories", "reply_targets"],
+  "properties": {
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "what", "why", "numbers", "angles", "pillar", "priority", "item_ids"],
+        "properties": {
+          "title": {"type": "string"},
+          "what": {"type": "string"},
+          "why": {"type": "string"},
+          "numbers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["label", "value", "source"],
+              "properties": {"label": {"type": "string"}, "value": {"type": "string"}, "source": {"type": "string"}}
+            }
+          },
+          "angles": {"type": "array", "items": {"type": "string"}},
+          "pillar": {"type": "string", "enum": ["digital_credit", "stablecoins", "legislation", "bitcoin", "macro",
+                                                "ai_models", "ai_benchmarks", "ai_payments", "physical_ai"]},
+          "priority": {"type": "integer", "enum": [1, 2, 3]},
+          "item_ids": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "reply_targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_id", "why"],
+        "properties": {"item_id": {"type": "string"}, "why": {"type": "string"}}
+      }
+    }
+  }
+}

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from xcp import db, gh, notify, showcase, xtext
+from xcp import config, db, gh, notify, showcase, xtext
 from xcp import showcase_gate as gate
 from xcp.sources import digital_exposure as de
 from xcp.timeutil import at_ny, fmt_ny, now_ny, nyse_open, today_ny, utcnow, weekly_release_date
@@ -157,6 +157,10 @@ def finalize(run_id: int, note: str = "", quiet: bool = False) -> int | None:
     if not first:
         _log(run_id, "image refreshed on the existing draft")
         return draft_id
+    if config.settings().get("writer", {}).get("mode", "monitor") != "drafts":  # you write the captions
+        if not quiet:
+            _alert_ready(run, draft_id, note)
+        return draft_id
     with db.session() as s:
         s.add(db.Request(kind="showcase_captions", payload={"draft_id": draft_id, "run_id": run_id}))
         s.commit()
@@ -183,8 +187,9 @@ def _alert_ready(run: db.ShowcaseRun, draft_id: int, note: str) -> None:
             what,
             f"digital-exposure audit: {n.get('PASS', 0)} PASS · {n.get('WARN', 0)} WARN · {n.get('FAIL', 0)} FAIL · "
             f"our checks: {sum(1 for c in run.checks if c['status'] == 'PASS')}/{len(run.checks)} pass",
-            note, "Save the image below and attach it to your post. Captions with more voice arrive in the Feed "
-                  "in a couple of minutes."]
+            note, "Save the image below and attach it to your post."
+            + (" Captions with more voice arrive in the Feed in a couple of minutes."
+               if config.settings().get("writer", {}).get("mode", "monitor") == "drafts" else "")]
     fields = [("Caption A (facts only)", caption[:1000])]
     if run.warnings:
         fields.append(("Heads-up", _lines(run.warnings)))

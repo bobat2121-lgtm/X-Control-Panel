@@ -15,6 +15,27 @@ pillars:
     label: "Macro"
     keywords: [Fed, FOMC, CPI, PCE, "jobs report", payrolls, "10Y", "2Y", treasury, yields, DXY, liquidity,
                "rate cut", "rate hike", Powell, inflation, recession, "credit spreads", "balance sheet", QT]
+  stablecoins:
+    lane: btc
+    group: digital_credit    # counts toward the digital-credit mix target
+    label: "Stablecoins"
+    keywords: [stablecoin, stablecoins, USDC, USDT, Tether, Circle, PYUSD, RLUSD, USD1, "GENIUS Act", Paxos,
+               "tokenized treasury", "tokenized treasuries", "tokenized deposits", BUIDL, "digital dollar",
+               "payment stablecoin", "stablecoin issuer"]
+  legislation:
+    lane: btc
+    group: macro
+    label: "Legislation & policy"
+    keywords: ["CLARITY Act", "GENIUS Act", "market structure bill", "crypto bill", "BITCOIN Act",
+               "Strategic Bitcoin Reserve", legislation, lawmakers, Senate, Congress, "Senate Banking",
+               "House Financial Services", rulemaking, regulator, regulators, CFTC, "SEC Chair", Atkins,
+               "executive order", "White House", Lummis, Bessent, OCC, FDIC, "no-action letter"]
+  ai_payments:
+    lane: ai
+    group: ai
+    label: "AI × stablecoins"
+    keywords: [x402, "agentic payments", "agentic commerce", "agent payments", "Agent Payments Protocol", AP2,
+               "machine payments", "AI agents", "AI agent"]
   ai_models:
     lane: ai
     label: "Frontier models"
@@ -42,25 +63,64 @@ x_searches:
     lane: btc
     query: '($MSTR OR $ASST OR Saylor OR "Strive") (bitcoin OR BTC OR preferred) -is:retweet -is:reply lang:en'
     max: 10
+  - name: stablecoins
+    lane: btc
+    query: '(stablecoin OR stablecoins OR "GENIUS Act" OR x402) -is:retweet -is:reply lang:en'
+    max: 10
+  - name: legislation
+    lane: btc
+    query: '("CLARITY Act" OR "market structure bill" OR "Strategic Bitcoin Reserve" OR "crypto bill") -is:retweet -is:reply lang:en'
+    max: 10
   - name: ai_frontier
     lane: ai
     query: '("new model" OR "SWE-bench" OR "ARC-AGI" OR "open weights" OR benchmark) (OpenAI OR Anthropic OR Gemini OR xAI OR DeepSeek OR Qwen) -is:retweet -is:reply lang:en'
-    max: 15
+    max: 10
   - name: physical_ai
     lane: ai
     query: '(robotaxi OR humanoid OR "self-driving truck" OR "autonomous trucking" OR Optimus) -is:retweet -is:reply lang:en'
-    max: 10
+    max: 5
 
+# News feeds. weight: how much a story from this source counts (official 3, major outlets 2, others 1).
+# pillar: the feed's topic when it is a tag feed. ua: sec = identify with SEC_USER_AGENT (SEC fair-access rule).
 rss:
-  - {name: CoinDesk, lane: btc, url: "https://www.coindesk.com/arc/outboundfeeds/rss/"}
-  - {name: The Block, lane: btc, url: "https://www.theblock.co/rss.xml"}
-  - {name: Bitcoin Magazine, lane: btc, url: "https://bitcoinmagazine.com/feed"}
+  - {name: Cointelegraph, lane: btc, url: "https://cointelegraph.com/rss", weight: 2}
+  - {name: Cointelegraph Bitcoin, lane: btc, url: "https://cointelegraph.com/rss/tag/bitcoin", weight: 2}
+  - {name: Cointelegraph Regulation, lane: btc, url: "https://cointelegraph.com/rss/tag/regulation", weight: 2, pillar: legislation}
+  - {name: Cointelegraph Stablecoins, lane: btc, url: "https://cointelegraph.com/rss/tag/stablecoin", weight: 2, pillar: stablecoins}
+  - {name: CoinDesk, lane: btc, url: "https://www.coindesk.com/arc/outboundfeeds/rss/", weight: 2}
+  - {name: The Block, lane: btc, url: "https://www.theblock.co/rss.xml", weight: 2}
+  - {name: Decrypt, lane: btc, url: "https://decrypt.co/feed", weight: 2}
+  - {name: Bitcoin Magazine, lane: btc, url: "https://bitcoinmagazine.com/feed", weight: 2}
+  - {name: The Defiant, lane: btc, url: "https://thedefiant.io/api/feed", weight: 1}
+  - {name: SEC press releases, lane: btc, url: "https://www.sec.gov/news/pressreleases.rss", weight: 3, official: true, ua: sec}
+  - {name: CFTC press releases, lane: btc, url: "https://www.cftc.gov/RSS/RSSGP/rssgp.xml", weight: 3, official: true}
+  - {name: Federal Reserve, lane: btc, url: "https://www.federalreserve.gov/feeds/press_all.xml", weight: 3, official: true}
   - {name: OpenAI News, lane: ai, url: "https://openai.com/news/rss.xml"}
   - {name: Google DeepMind, lane: ai, url: "https://deepmind.google/blog/rss.xml"}
   - {name: Hugging Face, lane: ai, url: "https://huggingface.co/blog/feed.xml"}
   - {name: TechCrunch AI, lane: ai, url: "https://techcrunch.com/category/artificial-intelligence/feed/"}
   - {name: The Robot Report, lane: ai, url: "https://www.therobotreport.com/feed/"}
   - {name: Electrek, lane: ai, url: "https://electrek.co/feed/"}
+
+# Google News topic searches: broad, fast coverage of what's surfacing across outlets (free, keyless).
+# window: how far back each search looks (Google's when: operator).
+google_news:
+  - {name: "Digital credit", lane: btc, pillar: digital_credit, window: 2d,
+     query: '(STRC OR SATA OR "digital credit" OR "perpetual preferred") (Strategy OR Strive OR bitcoin)'}
+  - {name: "Bitcoin treasuries", lane: btc, pillar: bitcoin, window: 1d,
+     query: '("bitcoin treasury" OR "Strategy Inc" OR MicroStrategy OR "Strive" OR Metaplanet) bitcoin'}
+  - {name: "Stablecoins", lane: btc, pillar: stablecoins, window: 1d,
+     query: 'stablecoin OR stablecoins OR USDC OR Tether'}
+  - {name: "Crypto legislation", lane: btc, pillar: legislation, window: 2d,
+     query: '("CLARITY Act" OR "GENIUS Act" OR "market structure bill" OR "crypto bill" OR "Strategic Bitcoin Reserve")'}
+  - {name: "Crypto regulators", lane: btc, pillar: legislation, window: 1d,
+     query: '(SEC OR CFTC OR OCC OR "Federal Reserve" OR Treasury) (crypto OR bitcoin OR stablecoin)'}
+  - {name: "AI × stablecoins", lane: ai, pillar: ai_payments, window: 3d,
+     query: '("AI agents" OR agentic OR x402) (stablecoin OR stablecoins OR payments OR crypto)'}
+  - {name: "Frontier AI", lane: ai, pillar: ai_models, window: 1d,
+     query: '("new model" OR "model release" OR launches) (OpenAI OR Anthropic OR "Google DeepMind" OR Gemini OR xAI OR DeepSeek OR Qwen)'}
+  - {name: "Physical AI", lane: ai, pillar: physical_ai, window: 2d,
+     query: '(robotaxi OR "humanoid robot" OR Waymo OR Optimus OR "autonomous trucks")'}
 
 # SEC filings: Strategy files its weekly BTC purchase / ATM 8-K most Monday mornings.
 edgar:

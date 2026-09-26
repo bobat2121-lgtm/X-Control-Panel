@@ -60,19 +60,31 @@ with t_agents:
     st.progress(min(month_reads / month_cap, 1.0) if month_cap else 0.0)
 
     st.markdown("#### Run now")
-    jobs = list(settings["slots"]) + ["nightly", "weekly", "snapshot", "style_refresh"]
-    labels = {**{k: v.get("label", k) for k, v in settings["slots"].items()},
+    jobs = ["monitor"] + list(settings["slots"]) + ["nightly", "weekly", "snapshot", "style_refresh"]
+    labels = {**{k: v.get("label", k) for k, v in settings["slots"].items()}, "monitor": "📡 Monitor",
               "nightly": "🌙 Nightly (metrics + ideas)", "weekly": "📅 Weekly review", "snapshot": "💹 Market snapshot",
               "style_refresh": "📚 Style refresh"}
+    mode = settings.get("writer", {}).get("mode", "monitor")
+    st.caption("Writer mode: " + ("🗞 **Monitor**: the slots write desk briefs and you write the posts."
+                                  if mode == "monitor" else "✍️ **Drafts**: the slots write post drafts.")
+               + " Change it in Settings.")
     cols = st.columns(len(jobs))
     for col, j in zip(cols, jobs):
         col.button(labels[j], key=f"run_{j}", width="stretch", on_click=enqueue, args=("run_job", {"job": j}))
 
     st.markdown("#### Recent runs")
     with db.session() as s:
-        runs = list(s.scalars(select(db.Run).order_by(db.Run.started_at.desc()).limit(40)).all())
+        runs = list(s.scalars(select(db.Run).where(db.Run.job != "monitor").order_by(db.Run.started_at.desc())
+                              .limit(40)).all())
+        mon_runs = list(s.scalars(select(db.Run).where(db.Run.job == "monitor").order_by(db.Run.started_at.desc())
+                                  .limit(96)).all())
         reqs = list(s.scalars(select(db.Request).order_by(db.Request.created_at.desc()).limit(40)).all())
     icon = {"ok": "✅", "error": "❌", "running": "⏳"}
+    if mon_runs:
+        errs = sum(1 for r in mon_runs if r.status == "error")
+        st.caption(f"📡 Monitor: last run {fmt_ny(mon_runs[0].started_at)} ({mon_runs[0].status}) · {len(mon_runs)} runs "
+                   f"in the last day or so, {errs} with errors · "
+                   + ", ".join(f"{k} {v}" for k, v in (mon_runs[0].stats or {}).items() if k != "empty_feeds"))
     for r in runs[:15]:
         with st.expander(f"{icon.get(r.status, '•')} {r.job} · {fmt_ny(r.started_at)} · {r.trigger}"
                          + (f" · X reads {r.x_reads}" if r.x_reads else "")):
@@ -180,6 +192,19 @@ with t_settings:
     c = st.columns(2)
     new["account"]["handle"] = c[0].text_input("Your X handle (no @)", settings["account"].get("handle", ""))
     new["account"]["premium"] = c[1].toggle("X Premium (long posts)", settings["account"].get("premium", True))
+
+    wm = settings.get("writer", {}).get("mode", "monitor")
+    new.setdefault("writer", {})["mode"] = st.radio(
+        "Writer mode", ["monitor", "drafts"], index=["monitor", "drafts"].index(wm) if wm in ("monitor", "drafts") else 0,
+        horizontal=True, format_func=lambda m: {"monitor": "🗞 Monitor: brief me, I write",
+                                                "drafts": "✍️ Drafts: the agents also write posts"}[m],
+        help="Monitor = the slots write desk briefs (what happened, why it matters, numbers, angle questions). "
+             "Drafts = the original mode, with AI-written post options. Switch back any time.")
+    mon = settings.get("monitor", {})
+    c = st.columns(2)
+    new.setdefault("monitor", {})["ping"] = c[0].toggle("⚡ Discord pings for priority news", bool(mon.get("ping", True)))
+    new["monitor"]["watchlist_digest_minutes"] = c[1].number_input(
+        "🎙 Watchlist digest every N minutes (0 = off)", 0, 240, int(mon.get("watchlist_digest_minutes", 30)), step=15)
 
     st.markdown("**Mix targets (% of posts)**")
     tg = settings["targets"]["pillars"]

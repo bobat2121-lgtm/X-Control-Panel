@@ -94,7 +94,15 @@ def run_job(name: str, trigger: str = "schedule", fn=None) -> dict:
 def _dispatch(name: str) -> dict:
     st = config.settings()
     if name in st["slots"]:
+        if st.get("writer", {}).get("mode", "monitor") == "monitor":  # brief the owner, who writes the posts
+            from xcp.agents import desk
+
+            return desk.run_desk(name)
         return slot.run_slot(name)
+    if name == "monitor":
+        from xcp.agents import monitor
+
+        return monitor.run()
     if name == "nightly":
         out = {"posts": analyst.import_own_posts()}
         out["x_reads"] = out["posts"].get("x_reads", 0)

@@ -15,8 +15,9 @@ from xcp.config import ROOT, env
 from xcp.timeutil import fmt_ago, parse_iso
 
 PILLAR_COLORS = {
-    "digital_credit": "#F7931A", "bitcoin": "#E8A33D", "macro": "#5B7083",
-    "ai_models": "#7C4DFF", "ai_benchmarks": "#3F51B5", "physical_ai": "#00897B",
+    "digital_credit": "#F7931A", "bitcoin": "#E8A33D", "macro": "#5B7083", "stablecoins": "#26A17B",
+    "legislation": "#8E44AD", "ai_models": "#7C4DFF", "ai_benchmarks": "#3F51B5", "ai_payments": "#00ACC1",
+    "physical_ai": "#00897B",
 }
 STATUS_ICONS = {"new": "🆕", "edited": "✏️", "posted": "✅", "dismissed": "🗑", "banked": "⭐", "snoozed": "⏰"}
 

@@ -265,7 +265,7 @@ class Watcher(unittest.TestCase):
         self.assertIn("$MSTR +950 BTC → 846,000 BTC held", caption)
         self.assertIn("8-K week Sep 14–20", caption)
         self.assertIn("?report=monday", caption)
-        self.assertIsNotNone(req)
+        self.assertIsNone(req)  # monitor mode (the default): you write the captions, no AI request
         self.assertEqual(len(sent), 1)
         self.assertEqual(sent[0][1]["image_name"], "monday.png")  # the image rides along in Discord
 

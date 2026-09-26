@@ -86,7 +86,10 @@ def pillar_lane(pillar: str | None) -> str:
 
 
 def target_group(pillar: str | None) -> str:
-    """Map a pillar to its target bucket (all AI pillars share the 'ai' target)."""
+    """Map a pillar to its target bucket (all AI pillars share the 'ai' target; a pillar may name its group)."""
+    group = pillars().get(pillar or "", {}).get("group")
+    if group:
+        return group
     return "ai" if pillar_lane(pillar) == "ai" else (pillar or "bitcoin")
 
 

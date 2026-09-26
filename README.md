@@ -1,6 +1,6 @@
 # 🛰️ X Control Panel
 
-AI agents draft your X posts (80% Bitcoin and digital credit, 20% AI). You edit, press **Post on X**, and the system learns from what you post.
+A news monitor and research desk for your X account (80% Bitcoin and digital credit, 20% AI). It watches your watchlist on X, crypto outlets, regulators, Google News topics and SEC filings, and pings you as stories break. At your slot times an AI desk writes briefs (what happened, why it matters, the numbers, angle questions); you write the posts. Writer mode **Drafts** (Control Room → Settings) brings back AI-written drafts when you want them.
 
 ```
                     GitHub Actions (cloud, on a schedule)
@@ -20,12 +20,13 @@ AI agents draft your X posts (80% Bitcoin and digital credit, 20% AI). You edit,
 
 | When | What happens |
 |---|---|
-| ☀️ 7:05 Mon–Fri | Pre-market drafts ready by about 7:20 for your 8:00 post |
+| 📡 every ~15 min | **Monitor**: your watchlist on X, news feeds (Cointelegraph, CoinDesk, The Block, Decrypt, Bitcoin Magazine, The Defiant), SEC/CFTC/Fed press, Google News topics (digital credit, stablecoins, legislation, AI × stablecoins, frontier and physical AI) and SEC 8-Ks. Groups the same story across outlets; ⚡ pings for priority news; 🎙 a digest of your accounts' new posts every 30 min |
+| ☀️ 7:05 Mon–Fri | Pre-market desk brief for your 8:00 post (Drafts mode: post drafts) |
 | 🧾 Mon 7:40–11:30 | **Showcase: The Accretion Ledger.** Waits for both weekly 8-Ks, then renders, audits and drafts it (usually 8:10–8:30). Tuesday after an EDGAR Monday holiday |
-| 🤖 11:20 daily | AI ideas for noon (posting is optional) |
-| 🕜 12:50 Mon–Fri | Midday drafts for 1:30 |
+| 🤖 11:20 daily | AI-lane desk brief for noon (posting is optional) |
+| 🕜 12:50 Mon–Fri | Midday desk brief for 1:30 |
 | 🎟 Wed 12:30 | **Showcase: The Coupon Sheet**, audited for the 1:30 post |
-| 🔔 16:10 Fri | After-close drafts for 4:30 |
+| 🔔 16:10 Fri | After-close desk brief for 4:30 |
 | 🔔 Fri 16:05 | **Showcase: The Closing Mark**, once the 4:00 pm closes have settled (about 4:10–4:20) |
 | 🌙 21:30 daily | Pull your post metrics, generate 3 new build ideas |
 | 🧪 Sun/Tue/Thu ~20:13 | Preflight: will tomorrow's panel render cleanly with digital-exposure's current code? Pings only if not |
@@ -116,6 +117,7 @@ The old Build Lab gallery (`showcase_gallery/`) is no longer in the showcase rot
 ---
 
 ## Daily use
+- **Monitor** (home page): ⚡ priority strip, the 🗞 live stream (filters for topic, window, source, search; refreshes every minute), 🧠 desk briefs, 🎙 your 7 accounts, ⭐ saved. **✍️ Write** opens a box next to the source: write your take, open it in X (quote post for X sources), or save it to the Feed. X reads stay under the monthly cap, with a share reserved for your watchlist so keyword searches can't crowd it out.
 - **Feed:** pick option A/B/C and edit inline (it saves automatically). Use one-click AI rewrites, 🚀 Post on X (opens X's composer), then ✅ Posted with the URL.
 - **Showcase days:** the 🟢 Discord message carries the audited image and caption A (facts only, taken from the image). Options B–D with more voice follow a couple of minutes later. Save the image, open X with the caption, and attach it. The Feed card has the same image with a Download button and a 🔄 Re-check.
 - **Build Lab:** 🧩 copy the build prompt into Claude Code or Codex. **Add launch draft** puts a finished build's post in any slot.
