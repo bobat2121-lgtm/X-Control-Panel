@@ -169,6 +169,8 @@ hr { border-color: var(--ink) !important; opacity: .25; }
 .xcp-badge { display: inline-block; padding: 2px 7px; margin: 0 4px 2px 0; border: 1px solid var(--ink); border-radius: 2px;
   font-family: var(--pixel); font-size: 10.5px; line-height: 1.5; letter-spacing: .03em; text-transform: uppercase;
   vertical-align: middle; white-space: nowrap; }
+.xcp-badge .g { font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", "Noto Sans Symbols", "DejaVu Sans", sans-serif;
+  font-size: 11px; line-height: 1; margin-right: 5px; text-transform: none; letter-spacing: 0; font-variant-emoji: text; }
 .xcp-b-ink { background: var(--ink); color: var(--tan2); }
 .xcp-b-tan { background: var(--tan2); color: var(--ink); }
 .xcp-b-paper { background: var(--paper); color: var(--ink); }
@@ -340,22 +342,26 @@ hr { border-color: var(--ink) !important; opacity: .25; }
 
 /* ---------------------------------------------------------------- monitor: the opened idea (full width) */
 [class*="st-key-detail"] { background: var(--paper); border: 2px solid var(--ink); border-radius: 3px; box-shadow: 7px 7px 0 var(--ink);
-  padding: 0 18px 18px !important; margin: 6px 0 14px; overflow: hidden; }
-[class*="st-key-dtb_"] { margin: 0 -18px 4px; width: calc(100% + 36px) !important; min-height: 30px; gap: 3px !important;
-  padding: 0 6px 0 10px; background: linear-gradient(180deg, #4A473D 0%, #23211C 48%, #0B0B09 52%, #1B1A16 100%);
-  border-bottom: 1px solid #000; }
+  padding: 0 !important; gap: 0 !important; margin: 6px 0 14px; overflow: hidden; }
+[class*="st-key-dbody_"] { padding: 12px 18px 18px !important; }
+[class*="st-key-dtb_"] { width: 100%; min-height: 30px; gap: 3px !important; padding: 0 6px 0 10px; flex-wrap: nowrap !important;
+  background: linear-gradient(180deg, #4A473D 0%, #23211C 48%, #0B0B09 52%, #1B1A16 100%); border-bottom: 1px solid #000; }
 [class*="st-key-dtb_"] > :first-child { flex: 1 1 auto !important; min-width: 0; }  /* title left, buttons right */
 [class*="st-key-dtb_"] [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
 [class*="st-key-dtb_"] p { margin: 0 !important; line-height: 1 !important; }
-[class*="st-key-dtb_"] .stButton button { width: 22px; min-width: 22px; height: 20px; min-height: 20px !important;
-  padding: 0 !important; border: 1px solid #000 !important; border-radius: 3px !important; background: var(--bevel) !important;
-  box-shadow: inset 1px 1px 0 #fff !important; }
-[class*="st-key-dtb_"] .stButton button p { font-family: var(--xp) !important; font-size: 11px !important; font-weight: 700;
-  line-height: 1 !important; }
+[class*="st-key-dtb_"] .stButton button { width: 22px; min-width: 22px !important; height: 20px; min-height: 20px !important;
+  padding: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important;
+  border: 1px solid #000 !important; border-radius: 3px !important; background: var(--bevel) !important;
+  box-shadow: inset 1px 1px 0 #fff !important; color: var(--ink) !important; }
+[class*="st-key-dtb_"] .stButton button * { margin: 0 !important; padding: 0 !important; line-height: 1 !important;
+  gap: 0 !important; }
+[class*="st-key-dtb_"] .stButton button [data-testid="stIconMaterial"] { font-size: 15px !important; color: inherit !important; }
+[class*="st-key-dtb_"] .stButton button p:empty, [class*="st-key-dtb_"] .stButton button [data-testid="stMarkdownContainer"]:empty
+  { display: none !important; }
 [class*="st-key-dtb_"] .stButton button:hover { border-color: var(--olive-hi) !important; box-shadow: inset 1px 1px 0 #fff,
   0 0 0 2px var(--olive-glow) !important; }
 .stApp [class*="st-key-wx_"] button { background: linear-gradient(180deg, #B7C66A, #6B7A26) !important; }
-.stApp [class*="st-key-wx_"] button p { color: #fff !important; }
+.stApp [class*="st-key-wx_"] button { color: #fff !important; }
 .xcp-idea-h { font-family: var(--display); font-style: italic; font-weight: 900; font-size: clamp(1.7rem, 3vw, 2.35rem);
   line-height: .98; color: var(--ink); margin: 4px 0 6px; letter-spacing: -.005em; }
 .xcp-lbl { font-family: var(--crisp); font-weight: 700; font-size: 12px; letter-spacing: .14em; text-transform: uppercase;

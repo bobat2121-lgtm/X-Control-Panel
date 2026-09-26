@@ -95,7 +95,8 @@ def badge(text: str, tone: str = "ink") -> str:
 
 def pillar_badge(pillar: str) -> str:
     label = config.pillars().get(pillar, {}).get("label", pillar)
-    return badge(f"{PILLAR_GLYPHS.get(pillar, '•')} {label}", "tan")
+    glyph = PILLAR_GLYPHS.get(pillar, "•") + "\ufe0e"  # text style, never the colour emoji (⚙ turns into one)
+    return f'<span class="xcp-badge xcp-b-tan"><span class="g">{esc_html(glyph)}</span>{esc_html(label)}</span>'
 
 
 def hero(app: str, headline: str, sub: str = "", stats: list[tuple] | None = None, kicker: str = "",

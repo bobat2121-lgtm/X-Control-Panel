@@ -292,7 +292,7 @@ def _lbl(text: str) -> None:
 
 
 def idea_body(idea: dict) -> None:
-    st.markdown(_chips(idea, full=True), unsafe_allow_html=True)
+    st.markdown(f"<div class='xcp-chips'>{_chips(idea, full=True)}</div>", unsafe_allow_html=True)
     st.markdown(f'<div class="xcp-idea-h">{esc_html(idea["title"])}</div>', unsafe_allow_html=True)
     if (line := _surfaced_html(idea)):
         st.markdown(line, unsafe_allow_html=True)
@@ -366,15 +366,18 @@ def detail(idea: dict, where: str, occ: dict | None = None) -> None:
         with st.container(horizontal=True, vertical_alignment="center", gap=None, key=f"dtb_{where}_{safe}"):
             st.markdown(f'<span class="xcp-tb-l">▣ IDEA.TXT — {esc_html(LABEL.get(idea["pillar"], idea["pillar"]))}'
                         f'{esc_html(slot)}</span>', unsafe_allow_html=True)
-            st.button("▁", key=f"wmin_{where}_{safe}", on_click=_toggle, args=(idea["key"],), help="Minimize")
-            st.button("▢", key=f"wmax_{where}_{safe}", on_click=_pin, args=(idea,),
+            st.button("", icon=":material/minimize:", key=f"wmin_{where}_{safe}", on_click=_toggle,
+                      args=(idea["key"],), help="Minimize")
+            st.button("", icon=":material/crop_square:", key=f"wmax_{where}_{safe}", on_click=_pin, args=(idea,),
                       help="Maximize: open it in the Writer tab")
-            st.button("✕", key=f"wx_{where}_{safe}", on_click=_toggle, args=(idea["key"],), help="Close")
-        left, right = st.columns([1.55, 1], gap="large")
-        with left:
-            idea_body(idea)
-        with right:
-            composer(idea, where)
+            st.button("", icon=":material/close:", key=f"wx_{where}_{safe}", on_click=_toggle, args=(idea["key"],),
+                      help="Close")
+        with st.container(key=f"dbody_{where}_{safe}"):
+            left, right = st.columns([1.55, 1], gap="large")
+            with left:
+                idea_body(idea)
+            with right:
+                composer(idea, where)
 
 
 def tile(idea: dict, where: str) -> None:
