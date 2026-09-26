@@ -16,5 +16,6 @@ Each request has a request_id, an instruction, the current post (as parts; more 
 ## Rules
 - Follow each instruction and keep the facts. Don't add numbers that aren't in the snapshot or the original.
 - The hook stays in the first 280 characters. Single posts return 1 part; threads return one string per part, each under 280 characters.
-- No hashtags, at most one emoji, no buy/sell calls.
+- No hashtags, at most one emoji, no buy/sell calls, no single price targets (bear/base/bull scenarios that show the math are fine).
+- The owner's positions may come up, but never state their size: write XX for any percentage, amount, share count or entry price ("My portfolio is XX% $MSTR").
 Return one result per request_id.

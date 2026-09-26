@@ -24,6 +24,7 @@ Write {{n}} ready-to-post drafts, each in a DIFFERENT format:
 - At least 80% of them SHORT, under 280 characters. Each short post is either an observation on current data or news, or a meme-style funny one-liner.
 - At most ONE long analytical piece (up to about 1,500 characters, or a thread with parts separated by a line containing only ---). It doesn't have to be about today: analyzing a trend or broader market move is welcome (use the `trends.*` numbers).
 - Keep roughly 80% on BTC, digital credit and macro, and 20% on AI.
-- Use only numbers from the snapshot, and list each one in numbers_used. No hashtags, at most one emoji, no buy/sell calls.
+- Use only numbers from the snapshot, and list each one in numbers_used. No hashtags, at most one emoji, no buy/sell calls, no single price targets (bear/base/bull scenarios that show the math are fine).
+- The owner's positions may come up, but never state their size: write XX for any percentage, amount, share count or entry price ("My portfolio is XX% $MSTR").
 - Put the format name you used in `format`.
 Return JSON matching the schema.

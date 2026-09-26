@@ -45,6 +45,9 @@ def _matches(value: float, known: list[float]) -> bool:
 
 
 MENTION_RE = re.compile(r"[@$]\w+")
+# "My portfolio is 84% $MSTR", "I sold 5% of my stack", "my average entry: $117" -> the owner writes XX themselves.
+POSITION_RE = re.compile(r"\b(?:my|i|i'm|i've)\b[^.\n]{0,50}?\b(?:portfolio|position|stack|allocation|entry|average|"
+                         r"avg|cost basis|bought|sold|holdings?|own)\b[^.\n]{0,40}?(?<![A-Za-z])\$?\d[\d,.]*%?", re.I)
 
 
 def check_variant(parts: list[str], snapshot_flat: dict, source_texts: list[str], style: str = "") -> list[str]:
@@ -69,9 +72,11 @@ def check_variant(parts: list[str], snapshot_flat: dict, source_texts: list[str]
         if len(parts) > 1 and xtext.weighted_len(p) > xtext.FOLD:
             flags.append(f"Thread part {i} is over 280 chars")
     lowered = text.lower()
-    for phrase in ("not financial advice", "nfa", "price target", "buy now", "to the moon", "🚨"):
+    for phrase in ("not financial advice", "nfa", "price target", "buy now", "🚨"):
         if phrase in lowered:
             flags.append(f"Avoid: '{phrase}'")
+    for m in POSITION_RE.finditer(text):  # the owner fills in their own position sizes
+        flags.append(f"Your position size is stated ('{m.group(0).strip()[:60]}'): write XX instead")
     if xtext.HASHTAG_RE.search(text):
         flags.append("Contains hashtags")
     return sorted(set(flags))

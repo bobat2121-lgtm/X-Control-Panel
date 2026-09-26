@@ -30,5 +30,6 @@ End at least one option with the full report link.
 ## Rules
 - Use only numbers from the figures above, written the way the image writes them. Never invent or recompute a figure.
 - The hook must land in the first 280 characters, and each thread part stays under 280.
-- No hashtags, at most one emoji, no buy/sell calls, no price targets, no "not financial advice". Cashtags are fine.
+- No hashtags, at most one emoji, no buy/sell calls, no single price targets (bear/base/bull scenarios that show the math are fine), no "not financial advice". Cashtags are fine.
+- The owner's positions may come up, but never state their size: write XX for any percentage, amount, share count or entry price ("My portfolio is XX% $MSTR").
 Return JSON matching the schema.
