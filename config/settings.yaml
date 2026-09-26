@@ -1,0 +1,79 @@
+# Defaults. Anything you change in the panel's Control Room is saved to the
+# database and overrides these values (new keys added here still flow through).
+
+account:
+  handle: ""          # your X handle, without the @
+  premium: true       # long posts allowed; the first 280 chars still carry the hook
+
+# All times are America/New_York (EST/EDT handled automatically).
+# run_at = when the agent starts; post_at = when you plan to post.
+slots:
+  premarket:
+    label: "☀️ Pre-market"
+    run_at: "07:05"
+    post_at: "08:00"
+    days: [mon, tue, wed, thu, fri]
+    lane: btc
+    stories: 3
+    variants: 3
+  ai_noon:
+    label: "🤖 AI ideas"
+    run_at: "11:20"
+    post_at: "12:00"
+    days: [mon, tue, wed, thu, fri, sat, sun]
+    lane: ai
+    stories: 3
+    variants: 2
+    optional: true
+  midday:
+    label: "🕜 Midday"
+    run_at: "12:50"
+    post_at: "13:30"
+    days: [mon, tue, wed, thu, fri]
+    lane: btc
+    stories: 3
+    variants: 3
+  friday_close:
+    label: "🔔 Friday close"
+    run_at: "16:10"
+    post_at: "16:30"
+    days: [fri]
+    lane: btc
+    stories: 2
+    variants: 3
+
+# On these slots the main post is a Build Lab creation (a Streamlit panel, GIF, sim...).
+# Regular drafts are still generated as a backup.
+showcase:
+  - {day: mon, slot: premarket}
+  - {day: wed, slot: midday}
+  - {day: fri, slot: friday_close}
+
+jobs:
+  nightly: {run_at: "21:30", days: [mon, tue, wed, thu, fri, sat, sun]}
+  weekly: {run_at: "17:00", days: [sun]}
+
+# Share of what you actually post (rolling 7 days). Must sum to 100.
+targets:
+  pillars: {digital_credit: 35, bitcoin: 30, macro: 15, ai: 20}
+  tones: {analytical: 50, timely: 30, funny: 20}
+
+limits:
+  x_max_posts_per_run: 300     # hard cap on X API post reads per agent run
+  x_daily_post_cap: 900        # hard cap per day (~$4.50 at $0.005/post)
+  items_to_llm: 120            # how many scanned items the writer sees per slot
+  item_text_chars: 600
+  include_watchlist_replies: false
+
+market:
+  tickers: [MSTR, STRC, STRF, STRK, STRD, ASST, SATA, IBIT, "^TNX", "DX-Y.NYB", "^GSPC", "GC=F"]
+  # Manual inputs used for derived metrics. Update in Control Room -> Market inputs.
+  mstr_btc_holdings: null        # BTC held by Strategy (update after the Monday 8-K)
+  asst_btc_holdings: null        # BTC held by Strive
+  strc_annual_rate_pct: null     # STRC dividend rate, reset monthly
+  sata_annual_rate_pct: 13.0     # SATA dividend rate (13.00% per May 2026 8-K; verify)
+  rates_as_of: "2026-05"
+
+llm:
+  backend: codex      # codex (your ChatGPT account via Codex CLI) | mock (offline testing)
+  codex_model: ""     # blank = Codex default model

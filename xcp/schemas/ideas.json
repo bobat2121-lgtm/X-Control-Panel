@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ideas", "memo", "lineup"],
+  "properties": {
+    "ideas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "hook", "format", "pillar", "why_now", "signal_links", "concept", "data_inputs",
+                     "build_spec", "effort", "impact", "novelty", "timeliness", "evergreen", "expires_in_days",
+                     "launch_post", "followups", "build_prompt", "series"],
+        "properties": {
+          "title": {"type": "string"},
+          "hook": {"type": "string"},
+          "format": {"type": "string", "enum": ["gif_sim", "short_video", "streamlit_page", "chart_pack", "calculator", "thread_series", "meme_template", "live_tracker"]},
+          "pillar": {"type": "string", "enum": ["digital_credit", "bitcoin", "macro", "ai_models", "ai_benchmarks", "physical_ai"]},
+          "why_now": {"type": "string"},
+          "signal_links": {"type": "array", "items": {"type": "string"}},
+          "concept": {"type": "string"},
+          "data_inputs": {"type": "string"},
+          "build_spec": {"type": "string"},
+          "effort": {"type": "string", "enum": ["S", "M", "L"]},
+          "impact": {"type": "integer"},
+          "novelty": {"type": "integer"},
+          "timeliness": {"type": "integer"},
+          "evergreen": {"type": "boolean"},
+          "expires_in_days": {"type": "integer"},
+          "launch_post": {"type": "string"},
+          "followups": {"type": "array", "items": {"type": "string"}},
+          "build_prompt": {"type": "string"},
+          "series": {"type": "string"}
+        }
+      }
+    },
+    "memo": {"type": "string"},
+    "lineup": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "slot", "idea_title"],
+        "properties": {
+          "date": {"type": "string"},
+          "slot": {"type": "string"},
+          "idea_title": {"type": "string"}
+        }
+      }
+    }
+  }
+}

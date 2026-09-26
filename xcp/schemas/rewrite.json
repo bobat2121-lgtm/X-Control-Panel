@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["results"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["request_id", "parts"],
+        "properties": {
+          "request_id": {"type": "integer"},
+          "parts": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

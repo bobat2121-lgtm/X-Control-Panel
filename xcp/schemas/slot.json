@@ -1,0 +1,103 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stories", "drafts", "replies", "showcase_variants"],
+  "properties": {
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "title", "summary", "pillar", "item_ids", "scores", "angle_ideas"],
+        "properties": {
+          "key": {"type": "string", "description": "short slug, unique in this response"},
+          "title": {"type": "string"},
+          "summary": {"type": "string"},
+          "pillar": {"type": "string", "enum": ["digital_credit", "bitcoin", "macro", "ai_models", "ai_benchmarks", "physical_ai"]},
+          "item_ids": {"type": "array", "items": {"type": "string"}},
+          "scores": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["timeliness", "insight", "engagement", "fit", "humor"],
+            "properties": {
+              "timeliness": {"type": "integer"},
+              "insight": {"type": "integer"},
+              "engagement": {"type": "integer"},
+              "fit": {"type": "integer"},
+              "humor": {"type": "integer"}
+            }
+          },
+          "angle_ideas": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "drafts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["story_key", "title", "pillar", "tone", "variants", "numbers_used", "inspiration_item_ids", "chart_hint"],
+        "properties": {
+          "story_key": {"type": "string"},
+          "title": {"type": "string", "description": "5-8 word internal label for the draft"},
+          "pillar": {"type": "string", "enum": ["digital_credit", "bitcoin", "macro", "ai_models", "ai_benchmarks", "physical_ai"]},
+          "tone": {"type": "string", "enum": ["analytical", "timely", "funny"]},
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["label", "style", "parts"],
+              "properties": {
+                "label": {"type": "string"},
+                "style": {"type": "string", "enum": ["analyst", "punchy", "funny", "thread", "brief", "quote"]},
+                "parts": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          },
+          "numbers_used": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["label", "value", "source"],
+              "properties": {
+                "label": {"type": "string"},
+                "value": {"type": "string"},
+                "source": {"type": "string"}
+              }
+            }
+          },
+          "inspiration_item_ids": {"type": "array", "items": {"type": "string"}},
+          "chart_hint": {"type": "string", "enum": ["none", "btc_7d", "strc_vs_par", "sata_vs_par", "mstr_vs_btc", "digital_credit_yields"]}
+        }
+      }
+    },
+    "replies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_id", "reply", "why"],
+        "properties": {
+          "item_id": {"type": "string"},
+          "reply": {"type": "string"},
+          "why": {"type": "string"}
+        }
+      }
+    },
+    "showcase_variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "style", "parts"],
+        "properties": {
+          "label": {"type": "string"},
+          "style": {"type": "string", "enum": ["showcase", "thread"]},
+          "parts": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

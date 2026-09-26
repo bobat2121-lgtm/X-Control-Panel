@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "panel",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "streamlit", "run", "streamlit_app.py", "--server.port", "8501"],
+      "port": 8501
+    },
+    {
+      "name": "gallery",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "streamlit", "run", "showcase_gallery/gallery_app.py", "--server.port", "8502"],
+      "port": 8502
+    }
+  ]
+}

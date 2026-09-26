@@ -1,0 +1,84 @@
+name: agent
+
+# GitHub cron is UTC and can start a few minutes late. Each slot has two hours
+# listed (EDT and EST); the agent itself only runs what is due in New York time.
+on:
+  schedule:
+    - cron: "5 11,12 * * 1-5"   # ☀️ pre-market     07:05 ET (Mon-Fri)
+    - cron: "20 15,16 * * *"    # 🤖 AI ideas       11:20 ET (daily)
+    - cron: "50 16,17 * * 1-5"  # 🕜 midday         12:50 ET (Mon-Fri)
+    - cron: "10 20,21 * * 5"    # 🔔 Friday close   16:10 ET (Fri)
+    - cron: "30 1,2 * * *"      # 🌙 nightly        21:30 ET (daily)
+    - cron: "0 21,22 * * 0"     # 📅 weekly review  17:00 ET (Sun)
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Force one job: premarket, ai_noon, midday, friday_close, nightly, weekly. Blank = whatever is due + queued panel requests."
+        required: false
+        default: ""
+
+# One run at a time: the Codex login refreshes in place and must not be used concurrently.
+concurrency:
+  group: agent
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      LLM_BACKEND: codex
+      CODEX_AUTH_FROM_DB: "1"
+      CODEX_AUTH_KEY: ${{ secrets.CODEX_AUTH_KEY }}
+      CODEX_MODEL: ${{ vars.CODEX_MODEL }}
+      X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      PANEL_URL: ${{ vars.PANEL_URL }}
+      FORCE_JOB: ${{ inputs.job }}
+    steps:
+      - name: Secrets configured?
+        id: cfg
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$CODEX_AUTH_KEY" ]; then
+            echo "::notice::DATABASE_URL / CODEX_AUTH_KEY secrets not set yet (README step 5). Skipping."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ok == 'true'
+
+      - uses: actions/setup-python@v5
+        if: steps.cfg.outputs.ok == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        if: steps.cfg.outputs.ok == 'true'
+        run: pip install -r requirements.txt
+
+      - name: What's due?
+        id: plan
+        if: steps.cfg.outputs.ok == 'true'
+        run: python -m jobs.run plan --job "$FORCE_JOB"
+
+      - uses: actions/setup-node@v4
+        if: steps.plan.outputs.needs_llm == 'true'
+        with:
+          node-version: "22"
+
+      - name: Install Codex CLI
+        if: steps.plan.outputs.needs_llm == 'true'
+        run: npm install -g @openai/codex
+
+      - name: Run agents
+        if: steps.plan.outputs.work == 'true'
+        run: python -m jobs.run auto --job "$FORCE_JOB"

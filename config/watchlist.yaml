@@ -1,0 +1,5 @@
+# Accounts you admire. The Scout reads their recent posts via X recent search.
+# lane: btc | ai     pillar (optional): digital_credit | bitcoin | macro | ai_models | ai_benchmarks | physical_ai
+# Edit here or in the panel (Control Room -> Watchlist).
+accounts: []
+#  - {handle: example_handle, lane: btc, pillar: digital_credit, note: "why I follow them"}

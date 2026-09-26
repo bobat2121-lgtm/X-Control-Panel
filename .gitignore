@@ -1,0 +1,14 @@
+# secrets
+.env
+.streamlit/secrets.toml
+.codex-cloud/
+auth.json
+
+# local data
+data/
+*.db
+
+# python
+.venv/
+__pycache__/
+*.pyc

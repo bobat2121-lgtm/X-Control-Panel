@@ -1,0 +1,68 @@
+# Content pillars. Keywords drive cheap classification of scanned items and your posts.
+pillars:
+  digital_credit:
+    lane: btc
+    label: "Digital credit"
+    keywords: [STRC, SATA, STRF, STRK, STRD, STRE, "digital credit", "Stretch", "perpetual preferred",
+               "preferred stock", mNAV, Saylor, "Strategy", MSTR, "Strive", ASST, DGCR, "dividend rate", "ATM"]
+  bitcoin:
+    lane: btc
+    label: "Bitcoin"
+    keywords: [bitcoin, BTC, sats, "spot ETF", IBIT, hashrate, "treasury company", mempool, halving,
+               "on-chain", miners, "self-custody", Lightning]
+  macro:
+    lane: btc
+    label: "Macro"
+    keywords: [Fed, FOMC, CPI, PCE, "jobs report", payrolls, "10Y", "2Y", treasury, yields, DXY, liquidity,
+               "rate cut", "rate hike", Powell, inflation, recession, "credit spreads", "balance sheet", QT]
+  ai_models:
+    lane: ai
+    label: "Frontier models"
+    keywords: [LLM, GPT, ChatGPT, Claude, Gemini, Grok, Llama, Qwen, DeepSeek, "open weights", "model release",
+               OpenAI, Anthropic, DeepMind, xAI, "reasoning model", "context window"]
+  ai_benchmarks:
+    lane: ai
+    label: "AI benchmarks"
+    keywords: [benchmark, "SWE-bench", "ARC-AGI", "Humanity's Last Exam", LMArena, leaderboard, evals,
+               "Artificial Analysis", "Epoch AI", "state of the art", SOTA, "METR"]
+  physical_ai:
+    lane: ai
+    label: "Physical AI"
+    keywords: [robotaxi, Waymo, Zoox, "self-driving", "autonomous truck", "driverless", Aurora, Kodiak,
+               humanoid, Optimus, "Figure AI", "Boston Dynamics", Unitree, "industrial automation", FSD, Cybercab]
+
+# Keyword searches on X (recent search). Each result costs ~$0.005 per post read.
+# Tip: keep "-is:retweet" and a per-query max to control cost.
+x_searches:
+  - name: digital_credit
+    lane: btc
+    query: '($STRC OR $SATA OR $STRF OR $STRK OR $STRD OR "digital credit" OR "Stretch preferred") -is:retweet lang:en'
+    max: 60
+  - name: strategy_strive
+    lane: btc
+    query: '($MSTR OR $ASST OR Saylor OR "Strive") (bitcoin OR BTC OR preferred) -is:retweet -is:reply lang:en'
+    max: 40
+  - name: ai_frontier
+    lane: ai
+    query: '("new model" OR "SWE-bench" OR "ARC-AGI" OR "open weights" OR benchmark) (OpenAI OR Anthropic OR Gemini OR xAI OR DeepSeek OR Qwen) -is:retweet -is:reply lang:en'
+    max: 40
+  - name: physical_ai
+    lane: ai
+    query: '(robotaxi OR humanoid OR "self-driving truck" OR "autonomous trucking" OR Optimus) -is:retweet -is:reply lang:en'
+    max: 30
+
+rss:
+  - {name: CoinDesk, lane: btc, url: "https://www.coindesk.com/arc/outboundfeeds/rss/"}
+  - {name: The Block, lane: btc, url: "https://www.theblock.co/rss.xml"}
+  - {name: Bitcoin Magazine, lane: btc, url: "https://bitcoinmagazine.com/feed"}
+  - {name: OpenAI News, lane: ai, url: "https://openai.com/news/rss.xml"}
+  - {name: Google DeepMind, lane: ai, url: "https://deepmind.google/blog/rss.xml"}
+  - {name: Hugging Face, lane: ai, url: "https://huggingface.co/blog/feed.xml"}
+  - {name: TechCrunch AI, lane: ai, url: "https://techcrunch.com/category/artificial-intelligence/feed/"}
+  - {name: The Robot Report, lane: ai, url: "https://www.therobotreport.com/feed/"}
+  - {name: Electrek, lane: ai, url: "https://electrek.co/feed/"}
+
+# SEC filings: Strategy files its weekly BTC purchase / ATM 8-K most Monday mornings.
+edgar:
+  - {name: Strategy, cik: 1050446, forms: ["8-K"]}
+  - {name: Strive, cik: 1920406, forms: ["8-K"]}

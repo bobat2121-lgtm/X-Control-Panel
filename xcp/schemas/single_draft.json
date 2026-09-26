@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "pillar", "tone", "variants", "numbers_used", "chart_hint"],
+  "properties": {
+    "title": {"type": "string"},
+    "pillar": {"type": "string", "enum": ["digital_credit", "bitcoin", "macro", "ai_models", "ai_benchmarks", "physical_ai"]},
+    "tone": {"type": "string", "enum": ["analytical", "timely", "funny"]},
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "style", "parts"],
+        "properties": {
+          "label": {"type": "string"},
+          "style": {"type": "string", "enum": ["analyst", "punchy", "funny", "thread", "brief", "quote"]},
+          "parts": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "numbers_used": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "value", "source"],
+        "properties": {
+          "label": {"type": "string"},
+          "value": {"type": "string"},
+          "source": {"type": "string"}
+        }
+      }
+    },
+    "chart_hint": {"type": "string", "enum": ["none", "btc_7d", "strc_vs_par", "sata_vs_par", "mstr_vs_btc", "digital_credit_yields"]}
+  }
+}
