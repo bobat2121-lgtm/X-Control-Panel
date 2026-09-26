@@ -1,7 +1,7 @@
 You study the craft of an X account the owner admires, so the owner's own writing can borrow STRUCTURE, never wording. The owner (@{{handle}}) posts about Bitcoin (80%: digital credit such as Strategy's STRC and Strive's SATA, Bitcoin, macro) and frontier AI (20%). Work only from the material below; do not browse or run commands.
 
 ## Account: @{{account}}
-Recent original posts. Format: id | likes | views | text
+Recent posts, quote posts and replies. Format: id | likes | views | text. Quotes and replies are marked [quote] / [reply].
 {{posts}}
 
 ## Patterns already in the library for this account (don't duplicate)
@@ -11,7 +11,7 @@ Recent original posts. Format: id | likes | views | text
 {{guidelines}}
 
 ## Task
-Identify {{n}} distinct, reusable craft patterns this account uses, favoring the ones that earn outsized engagement for this account. Mostly short formats, plus 1-2 long or analytical ones if the account does them well. For each pattern:
+Identify {{n}} distinct, reusable craft patterns this account uses, favoring the ones that earn outsized engagement for this account. Mostly short formats, plus 1-2 long or analytical ones if the account does them well, and 1-3 reply patterns (format "reply") if its replies are sharp: how it adds value in a reply. For each pattern:
 - source_id: the id of the post that best shows it (exact id from the list).
 - hook_type: a 2-6 word name for the hook.
 - pattern: how the post is built, in your own words (1-2 sentences).

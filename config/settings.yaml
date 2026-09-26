@@ -68,8 +68,10 @@ limits:
 # Style refresh (Control Room -> Run now -> 📚 Style refresh). X reads ≈ $0.005 each.
 style:
   posts_per_account: 100      # latest original posts per watchlist account
+  replies_reposts_per_account: 100  # extra latest items incl. replies/reposts per account
   own_posts_max: 1000         # cap on your own posts pulled into your voice library
-  include_own_replies: false  # true = your replies count toward your voice too
+  include_replies: true       # replies: your voice + reply craft from admired accounts
+  include_reposts: true       # reposts: saved as 'amplified' signals only (never voice)
 
 market:
   tickers: [MSTR, STRC, STRF, STRK, STRD, ASST, SATA, IBIT, "^TNX", "DX-Y.NYB", "^GSPC", "GC=F"]

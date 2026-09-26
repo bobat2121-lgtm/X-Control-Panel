@@ -54,7 +54,7 @@ def log_post(draft_id: int | None, url: str, text: str, pillar: str, tone: str |
 
 
 def add_my_post(s, url: str, text: str, pillar: str = "bitcoin", metrics: dict | None = None,
-                fmt: str = "short_observation") -> bool:
+                fmt: str = "short_observation", kind: str = "post") -> bool:
     """Every post you publish joins your voice library (neutral strength; you pick favorites in Control Room)."""
     text = (text or "").strip()
     if not text:
@@ -68,6 +68,7 @@ def add_my_post(s, url: str, text: str, pillar: str = "bitcoin", metrics: dict |
         return False
     s.add(db.StyleExample(source="mine", handle=(config.settings().get("account", {}).get("handle") or ""),
                           url=url or "", text=text, pillar=pillar or "bitcoin", format=fmt,
+                          hook_type="" if kind == "post" else kind,
                           length="long" if len(text) > 600 else ("medium" if len(text) > 280 else "short"),
                           metrics=metrics or {}, strength=5, active=True))
     return True

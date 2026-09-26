@@ -11,7 +11,7 @@
         "required": ["source_id", "format", "length", "pillar", "hook_type", "pattern", "skeleton", "demo", "why", "strength"],
         "properties": {
           "source_id": {"type": "string", "description": "id of the post that best shows this pattern"},
-          "format": {"type": "string", "enum": ["short_observation", "quick_analysis", "long_analysis", "thread", "humor_meme", "contrarian", "data_callout", "news_reaction", "question_hook", "chart_callout"]},
+          "format": {"type": "string", "enum": ["short_observation", "quick_analysis", "long_analysis", "thread", "humor_meme", "contrarian", "data_callout", "news_reaction", "question_hook", "chart_callout", "reply"]},
           "length": {"type": "string", "enum": ["short", "medium", "long"]},
           "pillar": {"type": "string", "enum": ["digital_credit", "bitcoin", "macro", "ai_models", "ai_benchmarks", "physical_ai"]},
           "hook_type": {"type": "string"},

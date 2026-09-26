@@ -277,7 +277,7 @@ with t_cal:
 
 # ------------------------------------------------------------------ style library
 FORMATS = ["short_observation", "quick_analysis", "long_analysis", "thread", "humor_meme", "contrarian",
-           "data_callout", "news_reaction", "question_hook", "chart_callout"]
+           "data_callout", "news_reaction", "question_hook", "chart_callout", "reply"]
 with t_style:
     sc = settings.get("style", {})
     st.info(f"📚 **Style refresh** (Agents tab → Run now) pulls the latest {sc.get('posts_per_account', 100)} posts from "
@@ -309,7 +309,8 @@ with t_style:
                 st.rerun()
 
     c = st.columns(3)
-    f_src = c[0].multiselect("Source", ["mine", "admired"], default=["mine", "admired"])
+    f_src = c[0].multiselect("Source", ["mine", "admired", "repost"], default=["mine", "admired"],
+                            help="repost = what you or they amplified; never used as voice")
     f_fmt = c[1].multiselect("Format", FORMATS, placeholder="All formats")
     f_handle = c[2].multiselect("Account", sorted({r.handle for r in rows if r.handle}), placeholder="All accounts")
     shown = [r for r in rows if r.source in f_src and (not f_fmt or r.format in f_fmt)

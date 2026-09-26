@@ -25,7 +25,7 @@ def style_block(lane: str | None = None, n: int = 12, seed: str = "") -> str:
     rng.shuffle(others)
     others.sort(key=lambda r: -r.strength)  # stable sort keeps the shuffle within each strength level
     mine = favorites + others[:max(0, 10 - len(favorites))]
-    admired = [r for r in rows if r.source != "mine"]
+    admired = [r for r in rows if r.source == "admired"]  # reposts are never voice or craft
 
     def rank(r):  # strength, lane fit, a little randomness for variety between runs
         fit = 1.5 if lane and config.pillar_lane(r.pillar) == lane else 0.0
@@ -44,7 +44,7 @@ def style_block(lane: str | None = None, n: int = 12, seed: str = "") -> str:
     lines = []
     if mine:
         lines.append("YOUR OWN BEST POSTS (the voice to match; these win any conflict):")
-        lines += [f"- {' '.join(r.text.split())[:500]}" for r in mine]
+        lines += [f"- {'(reply) ' if r.hook_type == 'reply' else ''}{' '.join(r.text.split())[:500]}" for r in mine]
     if picked:
         lines.append("CRAFT PATTERNS learned from accounts you admire (borrow structure only; never reuse their "
                      "wording, facts or jokes):")
