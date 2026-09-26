@@ -22,6 +22,9 @@ from xcp.config import ROOT
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # Request URLs can carry API keys in query strings, and Actions logs are public on a public repo.
+    for noisy in ("httpx", "httpcore", "yfinance", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(prog="jobs.run")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p_plan = sub.add_parser("plan")

@@ -82,3 +82,16 @@ jobs:
       - name: Run agents
         if: steps.plan.outputs.work == 'true'
         run: python -m jobs.run auto --job "$FORCE_JOB"
+
+  # Public repos: GitHub disables scheduled workflows after 60 days without repo activity.
+  # Re-enabling the workflow every Sunday keeps the schedule alive without dummy commits.
+  keepalive:
+    if: github.event.schedule == '0 21,22 * * 0'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Keep the schedule enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/agent.yml/enable"

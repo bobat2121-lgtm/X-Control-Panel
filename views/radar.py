@@ -6,7 +6,7 @@ from datetime import timedelta
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import badge, enqueue, esc_html, esc_md, pillar_badge
+from panel.common import badge, enqueue, esc_html, esc_md, is_owner, pillar_badge
 from xcp import config, db, xtext
 from xcp.timeutil import fmt_ago, today_ny, utcnow
 
@@ -30,12 +30,13 @@ with tab_stories:
     c = st.columns([1.2, 2, 3])
     day = c[0].date_input("Day", value=today_ny(), key="radar_day")
     only_open = c[1].toggle("Hide used/dismissed", value=True)
-    with c[2].popover("✍️ Draft from a link or idea", use_container_width=True):
-        src_in = st.text_input("X post URL, article link, or a raw idea", key="rdr_src")
-        angle = st.text_input("Your angle (optional)", key="rdr_angle")
-        if st.button("Create drafts", type="primary", key="rdr_go") and src_in.strip():
-            kind = "draft_from_url" if src_in.strip().startswith("http") else "draft_from_text"
-            enqueue(kind, {"url": src_in.strip(), "text": src_in.strip(), "angle": angle})
+    if is_owner():
+        with c[2].popover("✍️ Draft from a link or idea", width="stretch"):
+            src_in = st.text_input("X post URL, article link, or a raw idea", key="rdr_src")
+            angle = st.text_input("Your angle (optional)", key="rdr_angle")
+            if st.button("Create drafts", type="primary", key="rdr_go") and src_in.strip():
+                kind = "draft_from_url" if src_in.strip().startswith("http") else "draft_from_text"
+                enqueue(kind, {"url": src_in.strip(), "text": src_in.strip(), "angle": angle})
 
     with db.session() as s:
         stories = list(s.scalars(select(db.Story).where(db.Story.slot_date == day.isoformat())
@@ -56,15 +57,16 @@ with tab_stories:
             st.caption(" · ".join(f"{k} {v}" for k, v in sc.items()))
             if story.angle_ideas:
                 st.markdown("Angles: " + " · ".join(f"_{esc_md(a)}_" for a in story.angle_ideas[:4]))
-            b = st.columns(4)
-            b[0].button("⭐ Star", key=f"st_{story.id}", on_click=_story_status, args=(story.id, "starred"),
-                        use_container_width=True)
-            b[1].button("✍️ Draft this", key=f"dr_{story.id}", on_click=enqueue,
-                        args=("draft_from_story", {"story_id": story.id}), use_container_width=True, type="primary")
-            b[2].button("🛠 Build idea", key=f"bi_{story.id}", on_click=enqueue,
-                        args=("idea_from_story", {"story_id": story.id}), use_container_width=True)
-            b[3].button("🗑 Dismiss", key=f"sd_{story.id}", on_click=_story_status, args=(story.id, "dismissed"),
-                        use_container_width=True)
+            if is_owner():
+                b = st.columns(4)
+                b[0].button("⭐ Star", key=f"st_{story.id}", on_click=_story_status, args=(story.id, "starred"),
+                            width="stretch")
+                b[1].button("✍️ Draft this", key=f"dr_{story.id}", on_click=enqueue,
+                            args=("draft_from_story", {"story_id": story.id}), width="stretch", type="primary")
+                b[2].button("🛠 Build idea", key=f"bi_{story.id}", on_click=enqueue,
+                            args=("idea_from_story", {"story_id": story.id}), width="stretch")
+                b[3].button("🗑 Dismiss", key=f"sd_{story.id}", on_click=_story_status, args=(story.id, "dismissed"),
+                            width="stretch")
             with st.expander(f"{len(story.item_ids or [])} source items"):
                 with db.session() as s:
                     items = [s.get(db.Item, i) for i in story.item_ids or []]
@@ -104,18 +106,19 @@ with tab_replies:
                 st.caption(f"Why: {esc_md(d.title)}")
             key = f"rp_{variants[0].id}"
             text = st.text_area("Reply", value=xtext.join_parts(variants[0].parts), key=key, height=90,
-                                label_visibility="collapsed")
+                                label_visibility="collapsed", disabled=not is_owner())
             st.caption(f"{xtext.weighted_len(text)} chars")
-            b = st.columns([1.3, 1, 1, 1])
-            tid = xtext.tweet_id_from_url(src.get("url"))
-            if tid:
-                b[0].link_button("↩️ Reply on X", xtext.intent_reply(tid, text), type="primary", use_container_width=True)
-            if src.get("url"):
-                b[1].link_button("Open post ↗", src["url"], use_container_width=True)
-            b[2].button("✅ Done", key=f"rpd_{d.id}", on_click=_draft_status, args=(d.id, "posted"),
-                        use_container_width=True)
-            b[3].button("🗑 Skip", key=f"rps_{d.id}", on_click=_draft_status, args=(d.id, "dismissed"),
-                        use_container_width=True)
+            if is_owner():
+                b = st.columns([1.3, 1, 1, 1])
+                tid = xtext.tweet_id_from_url(src.get("url"))
+                if tid:
+                    b[0].link_button("↩️ Reply on X", xtext.intent_reply(tid, text), type="primary", width="stretch")
+                if src.get("url"):
+                    b[1].link_button("Open post ↗", src["url"], width="stretch")
+                b[2].button("✅ Done", key=f"rpd_{d.id}", on_click=_draft_status, args=(d.id, "posted"),
+                            width="stretch")
+                b[3].button("🗑 Skip", key=f"rps_{d.id}", on_click=_draft_status, args=(d.id, "dismissed"),
+                            width="stretch")
 
 # ------------------------------------------------------------------ raw
 with tab_raw:
@@ -135,6 +138,6 @@ with tab_raw:
              "author": i.author, "age": fmt_ago(i.created_at or i.fetched_at), "text": (i.text or "")[:220],
              "likes": (i.metrics or {}).get("like_count"), "link": i.url} for i in items]
     st.caption(f"{len(rows)} items")
-    st.dataframe(rows, hide_index=True, use_container_width=True, height=560,
+    st.dataframe(rows, hide_index=True, width="stretch", height=560,
                  column_config={"link": st.column_config.LinkColumn("link", display_text="open ↗"),
                                 "text": st.column_config.TextColumn("text", width="large")})

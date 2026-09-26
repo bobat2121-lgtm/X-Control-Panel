@@ -76,7 +76,7 @@ def chart(data: dict, height: int, title: str):
 
 
 st.altair_chart(chart({"Thermostat (monthly reset)": p_thermo, "Fixed rate": p_fixed, "$100 par": np.full(n, 100.0)},
-                      360, "Price"), use_container_width=True)
+                      360, "Price"), width="stretch")
 
 c = st.columns(4)
 near = lambda p: (np.abs(p - 100) <= 2).mean() * 100  # noqa: E731
@@ -87,7 +87,7 @@ c[3].metric("Lowest price: fixed", f"${p_fixed.min():.2f}")
 
 st.altair_chart(chart({"Thermostat dividend rate %": r_thermo, "Fixed dividend rate %": r_fixed,
                        "Market required yield %": y}, 280, "Dividend rate vs the market's required yield"),
-                use_container_width=True)
+                width="stretch")
 
 with st.expander("How the model works"):
     st.markdown(

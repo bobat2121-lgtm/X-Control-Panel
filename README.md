@@ -39,8 +39,8 @@ AI agents draft your X posts (80% Bitcoin and digital credit, 20% AI). You edit,
 
 ## Go live in the cloud (about 45 minutes, once)
 
-### 1. Private GitHub repo
-Create a **private** repo (e.g. `x-control-panel`) and push this folder to it. `.gitignore` already keeps `.env`, `data/` and logins out.
+### 1. GitHub repo
+Push this folder to a GitHub repo. `.gitignore` already keeps `.env`, `data/`, `.streamlit/secrets.toml` and logins out. The repo can be public: every secret lives in GitHub and Streamlit secrets, and a weekly keepalive stops GitHub from switching off the schedule on a public repo.
 
 ### 2. Database (free)
 Create a free Postgres database at [neon.tech](https://neon.tech) (or Supabase) and copy the connection string. That is your `DATABASE_URL`.
@@ -86,8 +86,8 @@ Variables (same page, Variables tab): `PANEL_URL` (your panel link, used in Disc
 ### 6. The panel on Streamlit Community Cloud (free, private)
 At [share.streamlit.io](https://share.streamlit.io), click **Create app**, pick your private repo, and set the main file to `streamlit_app.py`.
 
-- **Settings → Secrets:** paste the values from `.streamlit/secrets.toml.example`.
-- **Sharing:** only people you invite can view the app. Invite only your own email.
+- **Settings → Secrets:** paste the values from `.streamlit/secrets.toml.example`, including `PANEL_PASSWORD`.
+- **Access:** the free tier allows one private app, so this panel can run as a public app. Visitors are **view-only**: they can read drafts, ideas and stats, but every control that changes something (editing, rewrites, runs, settings) stays hidden until you unlock it with **🔑 Owner** and your `PANEL_PASSWORD`. The Control Room is owner-only. If you have a free private slot, make the app private instead.
 
 For instant rewrites and "Run now", create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with access to **only this repo** and the **Actions: Read and write** permission. Use it as `GH_DISPATCH_TOKEN`. Without it, button requests wait for the next scheduled run.
 

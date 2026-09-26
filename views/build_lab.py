@@ -6,7 +6,7 @@ from datetime import date
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import badge, enqueue, esc_md, pillar_badge
+from panel.common import badge, enqueue, esc_md, is_owner, pillar_badge
 from xcp import config, db, showcase, xtext
 from xcp.timeutil import fmt_ago, today_ny, utcnow
 
@@ -67,14 +67,15 @@ def idea_dialog(idea_id: int) -> None:
     if i.hook:
         st.markdown(f"> {esc_md(i.hook)}")
 
-    tabs = st.tabs(["🧩 Build prompt", "📝 Details", "🚀 Launch kit", "✏️ Edit"])
+    owner = is_owner()
+    tabs = st.tabs(["🧩 Build prompt", "📝 Details", "🚀 Launch kit"] + (["✏️ Edit"] if owner else []))
     with tabs[0]:
         st.caption("Paste into Claude Code or Codex to build it:")
         st.code(i.build_prompt or "(no prompt yet)", language=None, wrap_lines=True)
-        c = st.columns(4)
+        c = st.columns(4) if owner else []
         for col, (mode, label) in zip(c, [("remix", "🔀 Remix"), ("simpler", "🪶 Simpler"), ("wilder", "🌶 Wilder"),
                                           ("series", "🔁 Make a series")]):
-            if col.button(label, key=f"rmx_{mode}_{i.id}", use_container_width=True):
+            if col.button(label, key=f"rmx_{mode}_{i.id}", width="stretch"):
                 enqueue("idea_remix", {"idea_id": i.id, "mode": mode})
     with tabs[1]:
         st.markdown(f"**Why now:** {esc_md(i.why_now) or '—'}")
@@ -90,52 +91,54 @@ def idea_dialog(idea_id: int) -> None:
     with tabs[2]:
         st.markdown("**Launch post**")
         st.code(i.launch_post or "—", language=None, wrap_lines=True)
-        if i.launch_post:
+        if i.launch_post and owner:
             st.link_button("🚀 Post launch on X", xtext.intent_post(showcase.default_showcase_text(i)))
         for n, f in enumerate(i.followups or [], 1):
             st.markdown(f"**Follow-up {n}**")
             st.code(f, language=None, wrap_lines=True)
-        slots = config.settings()["slots"]
-        c = st.columns([1.2, 1.2, 1])
-        d = c[0].date_input("Showcase date", value=date.fromisoformat(i.showcase_date) if i.showcase_date else today_ny(),
-                            key=f"scd_{i.id}")
-        sc_slots = showcase.showcase_slots(d) or list(slots)
-        sl = c[1].selectbox("Slot", sc_slots, key=f"scs_{i.id}", format_func=lambda k: slots.get(k, {}).get("label", k))
-        c[2].button("Create showcase draft", key=f"scn_{i.id}", on_click=_showcase_now, args=(i.id, d.isoformat(), sl),
-                    type="primary", help="Puts the launch post in the Feed for that slot")
-    with tabs[3]:
-        with st.form(f"edit_{i.id}"):
-            title = st.text_input("Title", i.title)
-            hook = st.text_input("Hook", i.hook)
-            c = st.columns(4)
-            status = c[0].selectbox("Status", STATUSES, index=STATUSES.index(i.status), format_func=STATUS_LABELS.get)
-            fmt = c[1].selectbox("Format", list(FORMATS), index=list(FORMATS).index(i.format) if i.format in FORMATS else 0,
-                                 format_func=FORMATS.get)
-            effort = c[2].selectbox("Effort", ["S", "M", "L"], index=["S", "M", "L"].index(i.effort or "M"))
-            pillar = c[3].selectbox("Pillar", list(config.pillars()), index=list(config.pillars()).index(i.pillar)
-                                    if i.pillar in config.pillars() else 0)
-            c2 = st.columns(3)
-            impact = c2[0].slider("Impact", 1, 10, i.impact)
-            novelty = c2[1].slider("Novelty", 1, 10, i.novelty)
-            timeliness = c2[2].slider("Timeliness", 1, 10, i.timeliness)
-            shipped_url = st.text_input("Shipped link (Streamlit page / post / repo)", i.shipped_url)
-            media_url = st.text_input("Media link (GIF / video)", i.media_url)
-            series = st.text_input("Series", i.series)
-            launch_post = st.text_area("Launch post", i.launch_post, height=100)
-            concept = st.text_area("Concept", i.concept, height=120)
-            build_prompt = st.text_area("Build prompt", i.build_prompt, height=200)
-            notes = st.text_area("Notes", i.notes, height=80)
-            if st.form_submit_button("Save", type="primary"):
-                with db.session() as s:
-                    row = s.get(db.BuildIdea, i.id)
-                    row.title, row.hook, row.status, row.format, row.effort = title, hook, status, fmt, effort
-                    row.pillar, row.lane = pillar, config.pillar_lane(pillar)
-                    row.impact, row.novelty, row.timeliness = impact, novelty, timeliness
-                    row.shipped_url, row.media_url, row.series = shipped_url, media_url, series
-                    row.launch_post, row.concept, row.build_prompt, row.notes = launch_post, concept, build_prompt, notes
-                    row.updated_at = utcnow()
-                    s.commit()
-                st.rerun()
+        if owner:
+            slots = config.settings()["slots"]
+            c = st.columns([1.2, 1.2, 1])
+            d = c[0].date_input("Showcase date", value=date.fromisoformat(i.showcase_date) if i.showcase_date else today_ny(),
+                                key=f"scd_{i.id}")
+            sc_slots = showcase.showcase_slots(d) or list(slots)
+            sl = c[1].selectbox("Slot", sc_slots, key=f"scs_{i.id}", format_func=lambda k: slots.get(k, {}).get("label", k))
+            c[2].button("Create showcase draft", key=f"scn_{i.id}", on_click=_showcase_now, args=(i.id, d.isoformat(), sl),
+                        type="primary", help="Puts the launch post in the Feed for that slot")
+    if owner:
+        with tabs[3]:
+            with st.form(f"edit_{i.id}"):
+                title = st.text_input("Title", i.title)
+                hook = st.text_input("Hook", i.hook)
+                c = st.columns(4)
+                status = c[0].selectbox("Status", STATUSES, index=STATUSES.index(i.status), format_func=STATUS_LABELS.get)
+                fmt = c[1].selectbox("Format", list(FORMATS), index=list(FORMATS).index(i.format) if i.format in FORMATS else 0,
+                                     format_func=FORMATS.get)
+                effort = c[2].selectbox("Effort", ["S", "M", "L"], index=["S", "M", "L"].index(i.effort or "M"))
+                pillar = c[3].selectbox("Pillar", list(config.pillars()), index=list(config.pillars()).index(i.pillar)
+                                        if i.pillar in config.pillars() else 0)
+                c2 = st.columns(3)
+                impact = c2[0].slider("Impact", 1, 10, i.impact)
+                novelty = c2[1].slider("Novelty", 1, 10, i.novelty)
+                timeliness = c2[2].slider("Timeliness", 1, 10, i.timeliness)
+                shipped_url = st.text_input("Shipped link (Streamlit page / post / repo)", i.shipped_url)
+                media_url = st.text_input("Media link (GIF / video)", i.media_url)
+                series = st.text_input("Series", i.series)
+                launch_post = st.text_area("Launch post", i.launch_post, height=100)
+                concept = st.text_area("Concept", i.concept, height=120)
+                build_prompt = st.text_area("Build prompt", i.build_prompt, height=200)
+                notes = st.text_area("Notes", i.notes, height=80)
+                if st.form_submit_button("Save", type="primary"):
+                    with db.session() as s:
+                        row = s.get(db.BuildIdea, i.id)
+                        row.title, row.hook, row.status, row.format, row.effort = title, hook, status, fmt, effort
+                        row.pillar, row.lane = pillar, config.pillar_lane(pillar)
+                        row.impact, row.novelty, row.timeliness = impact, novelty, timeliness
+                        row.shipped_url, row.media_url, row.series = shipped_url, media_url, series
+                        row.launch_post, row.concept, row.build_prompt, row.notes = launch_post, concept, build_prompt, notes
+                        row.updated_at = utcnow()
+                        s.commit()
+                    st.rerun()
 
 
 # ------------------------------------------------------------------ page
@@ -156,7 +159,7 @@ for row in lineup:
     c[1].markdown(f"{row['label']} · {row['post_at']}")
     key = f"lu_{row['date']}_{row['slot']}"
     c[2].selectbox("Assigned build", opts, index=opts.index(idea.id) if idea and idea.id in opts else 0, key=key,
-                   label_visibility="collapsed", on_change=_assign, args=(row["date"].isoformat(), row["slot"], key),
+                   label_visibility="collapsed", on_change=_assign, disabled=not is_owner(), args=(row["date"].isoformat(), row["slot"], key),
                    format_func=lambda x: "— pick a build —" if x is None else f"#{x} {by_id[x].title[:60]}")
     if idea is None:
         c[3].markdown("⚠️ empty")
@@ -175,10 +178,10 @@ for col, i in zip(pc, picks):
         st.caption(f"{FORMATS.get(i.format, i.format)} · effort {i.effort} · pick score {pick_score(i)}")
         st.markdown(esc_md(i.hook[:160]))
         b = st.columns(2)
-        if b[0].button("Open", key=f"pk_open_{i.id}", use_container_width=True):
+        if b[0].button("Open", key=f"pk_open_{i.id}", width="stretch"):
             idea_dialog(i.id)
         b[1].button("⭐ Shortlist", key=f"pk_sl_{i.id}", on_click=_move, args=(i.id, "shortlist"),
-                    use_container_width=True, disabled=i.status == "shortlist")
+                    width="stretch", disabled=i.status == "shortlist" or not is_owner())
 if not picks:
     st.caption("No ideas in the inbox yet. The Strategist adds 3 every night, or generate some now 👇")
 
@@ -191,24 +194,25 @@ f_fmt = ctl[1].multiselect("Format", list(FORMATS), format_func=FORMATS.get, pla
 f_pillar = ctl[2].multiselect("Pillar", list(config.pillars()), placeholder="All pillars", label_visibility="collapsed",
                               format_func=lambda p: config.pillars()[p].get("label", p))
 show_arch = ctl[3].toggle("Archive")
-with ctl[4].popover("🧠 Generate ideas", use_container_width=True):
-    focus = st.text_input("Focus (optional)", placeholder="e.g. STRC dividend mechanics, robotaxi expansion")
-    if st.button("Generate 3 ideas", type="primary"):
-        enqueue("ideas_generate", {"focus": focus, "n": 3})
-with ctl[5].popover("➕ New idea", use_container_width=True):
-    with st.form("new_idea", clear_on_submit=True):
-        t = st.text_input("Title")
-        h = st.text_input("Hook")
-        fm = st.selectbox("Format", list(FORMATS), format_func=FORMATS.get)
-        pl = st.selectbox("Pillar", list(config.pillars()))
-        ef = st.selectbox("Effort", ["S", "M", "L"], index=1)
-        cp = st.text_area("Concept")
-        if st.form_submit_button("Add") and t:
-            with db.session() as s:
-                s.add(db.BuildIdea(title=t, hook=h, format=fm, pillar=pl, lane=config.pillar_lane(pl), effort=ef,
-                                   concept=cp, source="manual"))
-                s.commit()
-            st.rerun()
+if is_owner():
+    with ctl[4].popover("🧠 Generate ideas", width="stretch"):
+        focus = st.text_input("Focus (optional)", placeholder="e.g. STRC dividend mechanics, robotaxi expansion")
+        if st.button("Generate 3 ideas", type="primary"):
+            enqueue("ideas_generate", {"focus": focus, "n": 3})
+    with ctl[5].popover("➕ New idea", width="stretch"):
+        with st.form("new_idea", clear_on_submit=True):
+            t = st.text_input("Title")
+            h = st.text_input("Hook")
+            fm = st.selectbox("Format", list(FORMATS), format_func=FORMATS.get)
+            pl = st.selectbox("Pillar", list(config.pillars()))
+            ef = st.selectbox("Effort", ["S", "M", "L"], index=1)
+            cp = st.text_area("Concept")
+            if st.form_submit_button("Add") and t:
+                with db.session() as s:
+                    s.add(db.BuildIdea(title=t, hook=h, format=fm, pillar=pl, lane=config.pillar_lane(pl), effort=ef,
+                                       concept=cp, source="manual"))
+                    s.commit()
+                st.rerun()
 
 shown = [i for i in ideas if (show_arch or i.status != "archived")
          and (not f_fmt or i.format in f_fmt) and (not f_pillar or i.pillar in f_pillar)]
@@ -229,21 +233,21 @@ if view == "Board":
                     meta += f" · ⏳ {i.expires_on[5:]}"
                 st.caption(meta)
                 b = st.columns([1, 1, 1])
-                if b[0].button("🔍", key=f"op_{i.id}", use_container_width=True, help="Open"):
+                if b[0].button("🔍", key=f"op_{i.id}", width="stretch", help="Open"):
                     idea_dialog(i.id)
                 idx = STATUSES.index(stt)
-                if idx > 0:
+                if idx > 0 and is_owner():
                     b[1].button("◀", key=f"bk_{i.id}", on_click=_move, args=(i.id, STATUSES[idx - 1]),
-                                use_container_width=True)
-                if idx < len(STATUSES) - 1:
+                                width="stretch")
+                if idx < len(STATUSES) - 1 and is_owner():
                     b[2].button("▶", key=f"fw_{i.id}", on_click=_move, args=(i.id, STATUSES[idx + 1]),
-                                use_container_width=True)
+                                width="stretch")
 else:
     rows = [{"id": i.id, "title": i.title, "status": i.status, "format": FORMATS.get(i.format, i.format),
              "pillar": i.pillar, "effort": i.effort, "impact": i.impact, "novelty": i.novelty,
              "timely": i.timeliness, "pick": pick_score(i), "showcase": i.showcase_date or "",
              "series": i.series, "expires": i.expires_on or ""} for i in shown]
-    ev = st.dataframe(rows, hide_index=True, use_container_width=True, on_select="rerun",
+    ev = st.dataframe(rows, hide_index=True, width="stretch", on_select="rerun",
                       selection_mode="single-row", key="ideas_table")
     sel = ev.selection.rows if ev and ev.selection else []
     if sel:

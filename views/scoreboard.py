@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import esc_md
+from panel.common import esc_md, is_owner
 from xcp import config, db
 from xcp.agents import analyst
 from xcp.agents.collect import classify
@@ -54,7 +54,7 @@ else:
         index="week", columns="group", values="impressions", aggfunc="count", fill_value=0)
     wk.index = [f"wk of {d:%b %d}" for d in wk.index]
     c[0].bar_chart(wk, stack=True, height=260)
-    c[1].dataframe(mix_df, use_container_width=True)
+    c[1].dataframe(mix_df, width="stretch")
 
     st.markdown("#### What's working")
     c = st.columns(3)
@@ -62,13 +62,13 @@ else:
         agg = df.groupby(dim).agg(posts=("impressions", "size"), avg_impr=("impressions", "mean"),
                                   avg_eng=("eng_rate", "mean")).round(1).sort_values("avg_impr", ascending=False)
         col.caption(f"By {dim}")
-        col.dataframe(agg, use_container_width=True)
+        col.dataframe(agg, width="stretch")
     by_hour = df.assign(hour=df["posted"].dt.hour).groupby("hour")["impressions"].mean().round(0)
     st.caption("Avg impressions by hour posted (ET)")
     st.bar_chart(by_hour, height=180)
 
     st.markdown("#### Posts")
-    st.dataframe(df.sort_values("posted", ascending=False), hide_index=True, use_container_width=True,
+    st.dataframe(df.sort_values("posted", ascending=False), hide_index=True, width="stretch",
                  column_config={"link": st.column_config.LinkColumn("link", display_text="open ↗"),
                                 "posted": st.column_config.DatetimeColumn("posted", format="MMM D, h:mm a"),
                                 "text": st.column_config.TextColumn("text", width="large")})
@@ -90,13 +90,14 @@ if memo and memo.get("text"):
     st.markdown(f"#### 🗒 Weekly memo · {memo.get('date')}")
     st.markdown(esc_md(memo["text"]))
 
-with st.expander("➕ Log a post manually"):
-    with st.form("log_post", clear_on_submit=True):
-        url = st.text_input("Post URL")
-        text = st.text_area("Post text")
-        pillar = st.selectbox("Pillar", ["(auto)"] + list(config.pillars()))
-        tone = st.selectbox("Tone", ["analytical", "timely", "funny"])
-        if st.form_submit_button("Log") and (url or text):
-            p = classify(text)[1] if pillar == "(auto)" else pillar
-            analyst.log_post(None, url, text, p, tone, None)
-            st.rerun()
+if is_owner():
+    with st.expander("➕ Log a post manually"):
+        with st.form("log_post", clear_on_submit=True):
+            url = st.text_input("Post URL")
+            text = st.text_area("Post text")
+            pillar = st.selectbox("Pillar", ["(auto)"] + list(config.pillars()))
+            tone = st.selectbox("Tone", ["analytical", "timely", "funny"])
+            if st.form_submit_button("Log") and (url or text):
+                p = classify(text)[1] if pillar == "(auto)" else pillar
+                analyst.log_post(None, url, text, p, tone, None)
+                st.rerun()

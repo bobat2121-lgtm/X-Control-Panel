@@ -6,7 +6,7 @@ from datetime import timedelta
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import STATUS_ICONS, badge, enqueue, esc_html, esc_md, handle, pillar_badge
+from panel.common import STATUS_ICONS, badge, enqueue, esc_html, esc_md, handle, is_owner, pillar_badge
 from xcp import charts, config, db, showcase, xtext
 from xcp.agents import analyst
 from xcp.timeutil import at_ny, days_match, fmt_ago, fmt_ny, now_ny, today_ny, utcnow
@@ -122,6 +122,58 @@ def _height(parts: list[str]) -> int:
     return int(min(420, max(110, 26 * (chars / 70 + len(parts) + 1))))
 
 
+def _owner_actions(d: db.Draft, v: db.Variant, parts: list[str], text: str, text_key: str) -> None:
+    """Posting, status and rewrite controls (owner only)."""
+    first = parts[0]
+    src = next((i for i in (d.inspiration or []) if xtext.tweet_id_from_url(i.get("url"))), None)
+    a = st.columns([1.3, 1, 1, 1, 1, 1])
+    a[0].link_button("🚀 Post on X", xtext.intent_post(first), type="primary", width="stretch",
+                     help="Opens X's composer with this text" + (" (part 1; post the rest as replies)" if len(parts) > 1 else ""))
+    if src:
+        a[1].link_button("💬 Quote", xtext.intent_quote(src["url"], first), width="stretch")
+        a[2].link_button("↩️ Reply", xtext.intent_reply(xtext.tweet_id_from_url(src["url"]), first),
+                         width="stretch")
+    with a[3].popover("✅ Posted", width="stretch"):
+        st.text_input("Post URL (recommended, links metrics)", key=f"purl_{d.id}",
+                      placeholder="https://x.com/you/status/…")
+        st.button("Mark as posted", key=f"pbtn_{d.id}", type="primary", on_click=_mark_posted,
+                  args=(d.id, v.label, text_key, f"purl_{d.id}"))
+    with a[4].popover("🗑 Dismiss", width="stretch"):
+        st.radio("Why? (teaches the writer)", DISMISS_REASONS, key=f"dr_{d.id}")
+        st.button("Dismiss", key=f"dbtn_{d.id}", on_click=_set_status, args=(d.id, "dismissed", f"dr_{d.id}"))
+    with a[5].popover("⋯ More", width="stretch"):
+        st.button("⭐ Bank as evergreen", key=f"bank_{d.id}", on_click=_set_status, args=(d.id, "banked"),
+                  width="stretch")
+        st.button("⏰ Snooze to next slot", key=f"snz_{d.id}", on_click=_snooze, args=(d.id,),
+                  width="stretch")
+        st.button("🔁 Regenerate all options (AI)", key=f"regen_{d.id}", on_click=enqueue,
+                  args=("regenerate", {"draft_id": d.id}), width="stretch")
+        if d.status in ("dismissed", "banked", "posted"):
+            st.button("↩️ Back to new", key=f"new_{d.id}", on_click=_set_status, args=(d.id, "new"),
+                      width="stretch")
+        prompt = (f"Give me 3 sharper versions of this X post for @{handle() or 'me'} "
+                  f"(Bitcoin/digital credit/AI account). Keep facts; no hashtags.\n\n{text}")
+        st.link_button("💬 Open in ChatGPT", xtext.chatgpt_link(prompt), width="stretch")
+        st.caption("Copy:")
+        st.code(text, language=None, wrap_lines=True)
+
+    r = st.columns(len(REWRITES))
+    for i, (preset, lbl) in enumerate(REWRITES):
+        r[i].button(lbl, key=f"rw_{preset}_{d.id}", on_click=_rewrite, args=(d.id, v.label, preset),
+                    width="stretch", help="AI rewrite of this option (runs on your ChatGPT account)")
+    c = st.columns([5, 1.1, 1.1, 1])
+    c[0].text_input("Custom rewrite", key=f"ci_{d.id}", label_visibility="collapsed",
+                    placeholder="Custom rewrite… e.g. compare STRC's yield to the 10Y")
+    c[1].button("✨ Rewrite", key=f"cib_{d.id}", on_click=_rewrite_custom, args=(d.id, v.label, f"ci_{d.id}"),
+                width="stretch")
+    c[2].button("✂️ Thread-ify", key=f"split_{d.id}", on_click=_local_tool,
+                args=(d.id, v.label, v.style, text_key, "split"), help="Split locally, no AI",
+                width="stretch")
+    c[3].button("🧹 Plain", key=f"plain_{d.id}", on_click=_local_tool,
+                args=(d.id, v.label, v.style, text_key, "plain"), help="Strip emoji and hashtags",
+                width="stretch")
+
+
 def render_draft(d: db.Draft) -> None:
     with db.session() as s:
         variants = db.current_variants(s, d.id)
@@ -154,6 +206,7 @@ def render_draft(d: db.Draft) -> None:
         text_key = f"ta_{v.id}"
         text = st.text_area("Post", value=xtext.join_parts(v.parts), key=text_key, height=_height(v.parts),
                             label_visibility="collapsed", on_change=_save_edit, args=(d.id, v.label, v.style, text_key),
+                            disabled=not is_owner(),
                             help="Edits save automatically (Ctrl+Enter or click away). "
                                  "Separate thread posts with a line containing only ---")
         parts = xtext.split_parts(text)
@@ -168,54 +221,8 @@ def render_draft(d: db.Draft) -> None:
         note += f" · v{v.version} by {v.created_by}"
         st.caption(note)
 
-        first = parts[0]
-        src = next((i for i in (d.inspiration or []) if xtext.tweet_id_from_url(i.get("url"))), None)
-        a = st.columns([1.3, 1, 1, 1, 1, 1])
-        a[0].link_button("🚀 Post on X", xtext.intent_post(first), type="primary", use_container_width=True,
-                         help="Opens X's composer with this text" + (" (part 1; post the rest as replies)" if len(parts) > 1 else ""))
-        if src:
-            a[1].link_button("💬 Quote", xtext.intent_quote(src["url"], first), use_container_width=True)
-            a[2].link_button("↩️ Reply", xtext.intent_reply(xtext.tweet_id_from_url(src["url"]), first),
-                             use_container_width=True)
-        with a[3].popover("✅ Posted", use_container_width=True):
-            st.text_input("Post URL (recommended, links metrics)", key=f"purl_{d.id}",
-                          placeholder="https://x.com/you/status/…")
-            st.button("Mark as posted", key=f"pbtn_{d.id}", type="primary", on_click=_mark_posted,
-                      args=(d.id, v.label, text_key, f"purl_{d.id}"))
-        with a[4].popover("🗑 Dismiss", use_container_width=True):
-            st.radio("Why? (teaches the writer)", DISMISS_REASONS, key=f"dr_{d.id}")
-            st.button("Dismiss", key=f"dbtn_{d.id}", on_click=_set_status, args=(d.id, "dismissed", f"dr_{d.id}"))
-        with a[5].popover("⋯ More", use_container_width=True):
-            st.button("⭐ Bank as evergreen", key=f"bank_{d.id}", on_click=_set_status, args=(d.id, "banked"),
-                      use_container_width=True)
-            st.button("⏰ Snooze to next slot", key=f"snz_{d.id}", on_click=_snooze, args=(d.id,),
-                      use_container_width=True)
-            st.button("🔁 Regenerate all options (AI)", key=f"regen_{d.id}", on_click=enqueue,
-                      args=("regenerate", {"draft_id": d.id}), use_container_width=True)
-            if d.status in ("dismissed", "banked", "posted"):
-                st.button("↩️ Back to new", key=f"new_{d.id}", on_click=_set_status, args=(d.id, "new"),
-                          use_container_width=True)
-            prompt = (f"Give me 3 sharper versions of this X post for @{handle() or 'me'} "
-                      f"(Bitcoin/digital credit/AI account). Keep facts; no hashtags.\n\n{text}")
-            st.link_button("💬 Open in ChatGPT", xtext.chatgpt_link(prompt), use_container_width=True)
-            st.caption("Copy:")
-            st.code(text, language=None, wrap_lines=True)
-
-        r = st.columns(len(REWRITES))
-        for i, (preset, lbl) in enumerate(REWRITES):
-            r[i].button(lbl, key=f"rw_{preset}_{d.id}", on_click=_rewrite, args=(d.id, v.label, preset),
-                        use_container_width=True, help="AI rewrite of this option (runs on your ChatGPT account)")
-        c = st.columns([5, 1.1, 1.1, 1])
-        c[0].text_input("Custom rewrite", key=f"ci_{d.id}", label_visibility="collapsed",
-                        placeholder="Custom rewrite… e.g. compare STRC's yield to the 10Y")
-        c[1].button("✨ Rewrite", key=f"cib_{d.id}", on_click=_rewrite_custom, args=(d.id, v.label, f"ci_{d.id}"),
-                    use_container_width=True)
-        c[2].button("✂️ Thread-ify", key=f"split_{d.id}", on_click=_local_tool,
-                    args=(d.id, v.label, v.style, text_key, "split"), help="Split locally, no AI",
-                    use_container_width=True)
-        c[3].button("🧹 Plain", key=f"plain_{d.id}", on_click=_local_tool,
-                    args=(d.id, v.label, v.style, text_key, "plain"), help="Strip emoji and hashtags",
-                    use_container_width=True)
+        if is_owner():
+            _owner_actions(d, v, parts, text, text_key)
 
         n_src = len(d.inspiration or [])
         label = f"Inspiration & numbers · {n_src} source{'s' if n_src != 1 else ''}"
@@ -238,7 +245,7 @@ def render_draft(d: db.Draft) -> None:
                     st.markdown(f"[Open source ↗]({src_['url']})")
             if d.numbers:
                 st.caption("Numbers used (checked against the market snapshot)")
-                st.dataframe(d.numbers, hide_index=True, use_container_width=True)
+                st.dataframe(d.numbers, hide_index=True, width="stretch")
             if d.chart_hint and d.chart_hint != "none":
                 if st.button(f"📈 Render chart: {charts.CHARTS.get(d.chart_hint, d.chart_hint)}", key=f"ch_{d.id}"):
                     png, caption = charts.render(d.chart_hint, handle())
@@ -257,7 +264,7 @@ def render_draft(d: db.Draft) -> None:
                 cols = st.columns([5, 1])
                 cols[0].markdown(f"**v{h.version}** · {h.created_by} · {fmt_ny(h.created_at)}  \n"
                                  f"{esc_md(xtext.join_parts(h.parts)[:280])}")
-                if not h.is_current:
+                if not h.is_current and is_owner():
                     cols[1].button("Restore", key=f"rs_{h.id}", on_click=_restore,
                                    args=(d.id, h.label, h.parts, h.style, h.version))
 
@@ -308,14 +315,15 @@ with top[2]:
         n_pending = len(db.pending_requests(s))
     if n_pending:
         st.caption(f"⏳ {n_pending} AI request(s) queued or running")
-    with st.expander("✍️ Draft from a link or idea"):
-        src_in = st.text_input("X post URL, article link, or a raw idea", key="dfl_src")
-        angle = st.text_input("Your angle (optional)", key="dfl_angle")
-        if st.button("Create drafts", type="primary", key="dfl_go") and src_in.strip():
-            if src_in.strip().startswith("http"):
-                enqueue("draft_from_url", {"url": src_in.strip(), "angle": angle})
-            else:
-                enqueue("draft_from_text", {"text": src_in.strip(), "angle": angle})
+    if is_owner():
+        with st.expander("✍️ Draft from a link or idea"):
+            src_in = st.text_input("X post URL, article link, or a raw idea", key="dfl_src")
+            angle = st.text_input("Your angle (optional)", key="dfl_angle")
+            if st.button("Create drafts", type="primary", key="dfl_go") and src_in.strip():
+                if src_in.strip().startswith("http"):
+                    enqueue("draft_from_url", {"url": src_in.strip(), "angle": angle})
+                else:
+                    enqueue("draft_from_text", {"text": src_in.strip(), "angle": angle})
 
 f = st.columns([2, 2.4, 2, 1.1])
 slot_opts = [k for k in SLOT_ORDER]

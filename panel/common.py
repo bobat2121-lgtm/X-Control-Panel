@@ -1,10 +1,12 @@
 """Shared panel helpers: boot, market strip, badges, queueing agent work."""
 from __future__ import annotations
 
+import hmac
 import html
 import os
 import subprocess
 import sys
+import time
 
 import httpx
 import streamlit as st
@@ -43,18 +45,36 @@ def boot() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
 
 
-def password_gate() -> bool:
-    pw = env("PANEL_PASSWORD")
-    if not pw or st.session_state.get("_authed"):
-        return True
-    st.title("🛰️ X Control Panel")
-    entered = st.text_input("Password", type="password")
-    if entered and entered == pw:
-        st.session_state["_authed"] = True
-        st.rerun()
-    elif entered:
-        st.error("Wrong password")
-    return False
+def is_owner() -> bool:
+    """No PANEL_PASSWORD (local dev) = full control. Otherwise visitors are read-only until unlocked."""
+    return not env("PANEL_PASSWORD") or bool(st.session_state.get("_owner"))
+
+
+def _unlock() -> None:
+    entered = st.session_state.get("_pw", "")
+    if entered and hmac.compare_digest(entered.encode(), (env("PANEL_PASSWORD") or "").encode()):
+        st.session_state["_owner"] = True
+    else:
+        time.sleep(1.5)  # slow down guessing
+        st.session_state["_pw_err"] = True
+    st.session_state["_pw"] = ""
+
+
+def owner_bar() -> None:
+    if not env("PANEL_PASSWORD"):
+        return
+    c = st.columns([8, 1])
+    if st.session_state.get("_owner"):
+        c[0].caption("🔓 Owner mode: full control")
+        if c[1].button("🔒 Lock", width="stretch"):
+            st.session_state["_owner"] = False
+            st.rerun()
+    else:
+        c[0].caption("👁 View only")
+        with c[1].popover("🔑 Owner", width="stretch"):
+            st.text_input("Owner password", type="password", key="_pw", on_change=_unlock)
+            if st.session_state.pop("_pw_err", False):
+                st.error("Wrong password")
 
 
 def esc_md(text) -> str:
@@ -107,7 +127,7 @@ def market_strip() -> None:
     dxy = eq.get("DX-Y.NYB", {})
     cols[6].metric("DXY", f"{dxy['price']:.2f}" if dxy.get("price") else "—",
                    f"{dxy['chg_pct']:+.2f}%" if "chg_pct" in dxy else None, delta_color="off")
-    if cols[7].button("↻", help=f"Refresh market data (last: {fmt_ago(parse_iso(d.get('as_of')))})"):
+    if is_owner() and cols[7].button("↻", help=f"Refresh market data (last: {fmt_ago(parse_iso(d.get('as_of')))})"):
         from xcp.sources import market
 
         with st.spinner("Refreshing market data…"):
@@ -151,6 +171,9 @@ def dispatch_agent() -> str:
 
 
 def enqueue(kind: str, payload: dict, kick: bool = True) -> None:
+    if not is_owner():
+        st.toast("View only. Unlock with 🔑 Owner.", icon="👁")
+        return
     with db.session() as s:
         s.add(db.Request(kind=kind, payload=payload))
         s.commit()

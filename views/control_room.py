@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import enqueue
+from panel.common import enqueue, is_owner
 from xcp import config, db, notify
 from xcp.agents.collect import x_reads_today
 from xcp.config import env
@@ -15,6 +15,10 @@ from xcp.timeutil import fmt_ny, today_ny
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 LANES = ["btc", "ai"]
+
+if not is_owner():
+    st.info("🔒 The Control Room is owner-only. Unlock with 🔑 Owner at the top right.", icon="🔒")
+    st.stop()
 
 settings = config.settings()
 t_agents, t_settings, t_watch, t_voice, t_market, t_cal = st.tabs(
@@ -48,7 +52,7 @@ with t_agents:
               "nightly": "🌙 Nightly (metrics + ideas)", "weekly": "📅 Weekly review", "snapshot": "💹 Market snapshot"}
     cols = st.columns(len(jobs))
     for col, j in zip(cols, jobs):
-        col.button(labels[j], key=f"run_{j}", use_container_width=True, on_click=enqueue, args=("run_job", {"job": j}))
+        col.button(labels[j], key=f"run_{j}", width="stretch", on_click=enqueue, args=("run_job", {"job": j}))
 
     st.markdown("#### Recent runs")
     with db.session() as s:
@@ -63,7 +67,7 @@ with t_agents:
     st.markdown("#### Request queue")
     if reqs:
         st.dataframe([{"id": r.id, "kind": r.kind, "status": r.status, "created": fmt_ny(r.created_at),
-                       "error": r.error or ""} for r in reqs], hide_index=True, use_container_width=True)
+                       "error": r.error or ""} for r in reqs], hide_index=True, width="stretch")
     if st.button("🔔 Send a test Discord alert"):
         ok = notify.discord("✅ Test from X Control Panel", "If you can read this, alerts work.")
         st.toast("Sent" if ok else "Not sent: DISCORD_WEBHOOK_URL is missing in this app's secrets",
@@ -94,7 +98,7 @@ with t_settings:
                   "days": ",".join(v.get("days", [])), "lane": v.get("lane", "btc"), "stories": v.get("stories", 3),
                   "variants": v.get("variants", 3), "optional": bool(v.get("optional", False))}
                  for k, v in settings["slots"].items()]
-    edited = st.data_editor(pd.DataFrame(slot_rows), hide_index=True, use_container_width=True, key="slots_ed",
+    edited = st.data_editor(pd.DataFrame(slot_rows), hide_index=True, width="stretch", key="slots_ed",
                             disabled=["slot"],
                             column_config={"lane": st.column_config.SelectboxColumn("lane", options=LANES)})
     for _, row in edited.iterrows():
@@ -107,7 +111,7 @@ with t_settings:
 
     st.markdown("**Showcase slots** (a Build Lab creation is the main post)")
     sc = st.data_editor(pd.DataFrame(settings.get("showcase", [])), hide_index=True, num_rows="dynamic",
-                        use_container_width=True, key="sc_ed",
+                        width="stretch", key="sc_ed",
                         column_config={"day": st.column_config.SelectboxColumn("day", options=DAYS),
                                        "slot": st.column_config.SelectboxColumn("slot", options=list(settings["slots"]))})
     new["showcase"] = [{"day": r["day"], "slot": r["slot"]} for _, r in sc.iterrows() if r.get("day") and r.get("slot")]
@@ -142,7 +146,7 @@ with t_watch:
     pillar_opts = [""] + list(config.pillars())
     df = pd.DataFrame(accounts or [{"handle": "", "lane": "btc", "pillar": "", "note": ""}],
                       columns=["handle", "lane", "pillar", "note"])
-    ed = st.data_editor(df, num_rows="dynamic", hide_index=True, use_container_width=True, key="wl_ed",
+    ed = st.data_editor(df, num_rows="dynamic", hide_index=True, width="stretch", key="wl_ed",
                         column_config={"lane": st.column_config.SelectboxColumn("lane", options=LANES, required=True),
                                        "pillar": st.column_config.SelectboxColumn("pillar", options=pillar_opts)})
     with st.expander("Bulk add (paste handles)"):
@@ -168,7 +172,7 @@ with t_watch:
     st.markdown("**Keyword searches on X**")
     pcfg = config.get("pillars")
     xs = st.data_editor(pd.DataFrame(pcfg.get("x_searches", [])), num_rows="dynamic", hide_index=True,
-                        use_container_width=True, key="xs_ed",
+                        width="stretch", key="xs_ed",
                         column_config={"lane": st.column_config.SelectboxColumn("lane", options=LANES),
                                        "query": st.column_config.TextColumn("query", width="large")})
     if st.button("💾 Save searches"):
@@ -217,7 +221,7 @@ with t_cal:
     df = pd.DataFrame([{"id": e.id, "date": e.date, "time": e.time, "title": e.title, "pillar": e.pillar,
                         "importance": e.importance, "notes": e.notes} for e in evs],
                       columns=["id", "date", "time", "title", "pillar", "importance", "notes"])
-    ed = st.data_editor(df, num_rows="dynamic", hide_index=True, use_container_width=True, key="cal_ed",
+    ed = st.data_editor(df, num_rows="dynamic", hide_index=True, width="stretch", key="cal_ed",
                         disabled=["id"],
                         column_config={"pillar": st.column_config.SelectboxColumn("pillar", options=list(config.pillars())),
                                        "importance": st.column_config.NumberColumn("importance", min_value=1, max_value=3)})
