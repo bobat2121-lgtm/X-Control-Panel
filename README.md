@@ -125,8 +125,8 @@ The old Build Lab gallery (`showcase_gallery/`) is no longer in the showcase rot
 
 ## Things to keep current
 - **Voice** (Control Room → Voice): paste 20+ of your best posts. This is the biggest quality lever.
-- **Market inputs:** Strategy's and Strive's BTC holdings after their 8-Ks, and the STRC rate each month.
-- **Calendar:** CPI, FOMC, jobs, earnings. The writer plans around them.
+- **Market inputs:** automatic. BTC holdings come from the latest weekly 8-K, STRC's rate from strategy.com and SATA's from strive.com, each with its date and source (Control Room → Market inputs). The values you type there are only a fallback.
+- **Calendar:** automatic nightly: FOMC, GDP and PCE, STRC record/pay dates, MSTR/ASST earnings, and your report's curated STRC/SATA events. CPI and jobs dates need the BLS switch in Control Room → Calendar (BLS requires a contact email). Add your own events there; they're never touched.
 
 ## Troubleshooting
 - **"No Codex login in the database" or 401 errors:** redo step 4.

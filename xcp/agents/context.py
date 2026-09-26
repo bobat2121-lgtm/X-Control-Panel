@@ -101,7 +101,9 @@ def calendar_block(days: int = 7) -> str:
         rows = s.scalars(select(db.CalendarEvent).where(db.CalendarEvent.date >= start.isoformat(),
                                                          db.CalendarEvent.date <= end.isoformat())
                          .order_by(db.CalendarEvent.date, db.CalendarEvent.time)).all()
-    return "\n".join(f"{r.date} {r.time} {r.title} ({r.pillar})" for r in rows) or "(no events entered)"
+    rows = [r for r in rows if "superseded" not in (r.notes or "")]
+    return "\n".join(f"{r.date} {r.time + ' ET ' if r.time else ''}{r.title} ({r.pillar})" for r in rows) \
+        or "(no events entered)"
 
 
 def items_block(items: list[db.Item], max_chars: int = 600) -> str:

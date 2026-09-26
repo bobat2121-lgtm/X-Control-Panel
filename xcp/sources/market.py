@@ -253,10 +253,37 @@ def trends() -> dict:
 
 # ------------------------------------------------------------------ snapshot
 
+def _inputs(m: dict) -> tuple[dict, dict]:
+    """Holdings and dividend rates: automatic (8-K feed, strategy.com, strive.com) unless turned off in
+    Control Room; the manual values there are the fallback. Returns (market settings to use, provenance)."""
+    m = dict(m)
+    provenance: dict = {}
+    auto = {}
+    if m.get("auto_inputs", True):
+        from xcp.sources import issuers
+
+        try:
+            auto = issuers.refresh()["values"]
+        except Exception as e:  # never let this block a snapshot
+            log.warning("issuer inputs failed: %s", e)
+            auto = (issuers.last().get("values") or {})
+    for key in ("mstr_btc_holdings", "asst_btc_holdings", "strc_annual_rate_pct", "sata_annual_rate_pct"):
+        a = auto.get(key) or {}
+        if a.get("value") is not None:
+            m[key] = a["value"]
+            provenance[key] = m[key]
+            provenance[f"{key}_as_of"] = f"{a.get('as_of')} ({a.get('source')})"
+        elif m.get(key) is not None:
+            provenance[key] = m[key]
+            provenance[f"{key}_as_of"] = f"{m.get('rates_as_of') or 'unknown'} (entered by hand)"
+    return m, provenance
+
+
 def take_snapshot(save: bool = True) -> dict:
     st = config.settings()
-    m = st.get("market", {})
+    m, provenance = _inputs(st.get("market", {}))
     data: dict = {"as_of": utcnow().isoformat(), "as_of_ny": now_ny().strftime("%Y-%m-%d %H:%M ET")}
+    data["inputs"] = provenance
     data["btc"] = btc()
     data["equities"] = equities(list(m.get("tickers", [])))
     data["onchain"] = onchain()

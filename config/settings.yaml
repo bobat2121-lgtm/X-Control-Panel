@@ -80,6 +80,14 @@ digital_exposure:
       deadline: "18:30"
       post: "16:30"
 
+# Calendar fills itself nightly: FOMC (Fed), GDP/PCE (BEA), STRC dates (strategy.com), MSTR/ASST
+# earnings (Nasdaq), and digital-exposure's curated STRC/SATA events. CPI and jobs dates come from BLS,
+# which only answers requests that include a contact email: bls_contact: true uses your SEC_USER_AGENT.
+calendar:
+  auto: true
+  days_ahead: 60
+  bls_contact: false
+
 jobs:
   nightly: {run_at: "21:30", days: [mon, tue, wed, thu, fri, sat, sun]}
   weekly: {run_at: "17:00", days: [sun]}
@@ -107,7 +115,9 @@ style:
 
 market:
   tickers: [MSTR, STRC, STRF, STRK, STRD, ASST, SATA, IBIT, "^TNX", "DX-Y.NYB", "^GSPC", "GC=F"]
-  # Manual inputs used for derived metrics. Update in Control Room -> Market inputs.
+  # Holdings and dividend rates fill automatically (8-K feed, strategy.com, strive.com) on every snapshot.
+  # The values below are the fallback if a source fails, or what's used when auto_inputs is off.
+  auto_inputs: true
   mstr_btc_holdings: null        # BTC held by Strategy (update after the Monday 8-K)
   asst_btc_holdings: null        # BTC held by Strive
   strc_annual_rate_pct: null     # STRC dividend rate, reset monthly

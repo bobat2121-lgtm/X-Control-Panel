@@ -11,6 +11,7 @@ from panel.common import enqueue, is_owner
 from xcp import config, db, gh, notify, showcase
 from xcp.agents.collect import x_reads_this_month, x_reads_today
 from xcp.config import env
+from xcp.sources import calendar_feeds, issuers
 from xcp.timeutil import fmt_ny, parse_iso, today_ny
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -323,7 +324,21 @@ with t_voice:
 # ------------------------------------------------------------------ market inputs
 with t_market:
     m = settings.get("market", {})
-    st.caption("Used for derived metrics (basic mNAV, effective yields). Update when Strategy/Strive announce changes.")
+    auto_on = st.toggle("Fill holdings and dividend rates automatically", bool(m.get("auto_inputs", True)),
+                        help="BTC holdings from the latest weekly 8-K, STRC's rate from strategy.com, SATA's from "
+                             "strive.com. Checked on every market snapshot.")
+    auto = issuers.last()
+    labels = {"mstr_btc_holdings": "Strategy BTC holdings", "asst_btc_holdings": "Strive BTC holdings",
+              "strc_annual_rate_pct": "STRC rate %", "sata_annual_rate_pct": "SATA rate %"}
+    if auto.get("values"):
+        st.dataframe([{"input": labels.get(k, k), "value": f"{v['value']:,.4g}" if v["value"] < 100 else f"{v['value']:,.0f}",
+                       "as of": v.get("as_of"), "source": v.get("source"), "": "" if v.get("fresh") else "last good value"}
+                      for k, v in auto["values"].items()], hide_index=True, width="stretch")
+        st.caption(f"Last checked {fmt_ny(parse_iso(auto.get('checked_at')))}"
+                   + (f" · ⚠️ {'; '.join(auto['errors'])[:300]}" if auto.get("errors") else ""))
+    else:
+        st.caption("No automatic check yet: it runs with the next market snapshot (every agent run, or Refresh).")
+    st.markdown("**Fallback values** (used if a source fails, or everything when the toggle is off)")
     c = st.columns(2)
     mstr = c[0].number_input("Strategy BTC holdings", 0, 5_000_000, int(m.get("mstr_btc_holdings") or 0), step=100)
     asst = c[1].number_input("Strive BTC holdings", 0, 1_000_000, int(m.get("asst_btc_holdings") or 0), step=10)
@@ -334,16 +349,42 @@ with t_market:
     tickers = st.text_input("Tickers on the Market Desk", ", ".join(m.get("tickers", [])))
     if st.button("💾 Save market inputs", type="primary"):
         new = copy.deepcopy(settings)
-        new["market"].update({"mstr_btc_holdings": mstr or None, "asst_btc_holdings": asst or None,
+        new["market"].update({"auto_inputs": auto_on, "mstr_btc_holdings": mstr or None, "asst_btc_holdings": asst or None,
                               "strc_annual_rate_pct": strc or None, "sata_annual_rate_pct": sata or None,
                               "rates_as_of": asof, "tickers": [t.strip() for t in tickers.split(",") if t.strip()]})
         config.save("settings", new)
         st.toast("Saved. Takes effect on the next snapshot.", icon="💹")
 
 # ------------------------------------------------------------------ calendar
+def _cal_sync() -> None:
+    out = calendar_feeds.sync()
+    st.toast(f"Calendar: {out.get('added', 0)} added, {out.get('updated', 0)} updated"
+             + (f" · {len(out['errors'])} source error(s)" if out.get("errors") else ""), icon="📅")
+
+
+def _bls_toggle() -> None:
+    new = copy.deepcopy(settings)
+    new.setdefault("calendar", {})["bls_contact"] = bool(st.session_state.get("bls_contact"))
+    config.save("settings", new)
+
+
 with t_cal:
-    st.caption("Events the writer should know about: FOMC, CPI, jobs, earnings, STRC rate announcements, "
-               "SATA rate changes, launches.")
+    cal_cfg = settings.get("calendar", {})
+    st.caption("Fills itself nightly: FOMC (Fed), GDP and PCE (BEA), STRC record/pay dates (strategy.com), MSTR/ASST "
+               "earnings (Nasdaq, 'est.' until confirmed), and your report's curated STRC/SATA events. Rows marked "
+               "auto: are managed for you; add your own below (launches, conferences) and they're never touched.")
+    c = st.columns([1.2, 3])
+    c[0].button("🔄 Refresh now", on_click=_cal_sync, width="stretch")
+    c[1].toggle("Include CPI and jobs dates (BLS)", bool(cal_cfg.get("bls_contact")), key="bls_contact",
+                on_change=_bls_toggle,
+                help="BLS only answers requests that carry a contact email. On = the calendar sends your "
+                     "SEC_USER_AGENT contact to bls.gov when it checks the schedule.")
+    last = db.kv_get("calendar:last_sync") or {}
+    if last.get("at"):
+        st.caption(f"Last refresh {fmt_ny(parse_iso(last['at']))}: " + " · ".join(
+            f"{k} {v}" for k, v in (last.get("by_source") or {}).items())
+            + (f" · ⚠️ {'; '.join(last['errors'])[:300]}" if last.get("errors") else "")
+            + (f" · {last['note']}" if last.get("note") else ""))
     with db.session() as s:
         evs = list(s.scalars(select(db.CalendarEvent).where(db.CalendarEvent.date >= today_ny().isoformat())
                              .order_by(db.CalendarEvent.date)).all())

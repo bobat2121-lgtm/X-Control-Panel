@@ -98,6 +98,12 @@ def _dispatch(name: str) -> dict:
     if name == "nightly":
         out = {"posts": analyst.import_own_posts()}
         out["x_reads"] = out["posts"].get("x_reads", 0)
+        try:  # the calendar must never sink the rest of the nightly job
+            from xcp.sources import calendar_feeds
+
+            out["calendar"] = calendar_feeds.sync()
+        except Exception as e:
+            out["calendar"] = {"error": str(e)[:300]}
         out["ideas"] = strategist.daily()
         return out
     if name == "weekly":
