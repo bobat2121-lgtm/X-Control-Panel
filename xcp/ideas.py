@@ -7,9 +7,10 @@ Ideas are plain dicts (JSON-safe) so the Writer tab can pin them.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from xcp import config, db, showcase
 from xcp.timeutil import at_ny, aware, days_match, now_ny, parse_iso, utcnow
@@ -92,6 +93,116 @@ def related(idea: dict, pool: list[dict], n: int = 5) -> list[dict]:
     return [x for _, _, x in scored[:n]]
 
 
+# ------------------------------------------------------------------ when did the event first surface?
+
+ORIGIN_DAYS = 14  # how far back to look for earlier coverage (by publish time)
+ORIGIN_SIM = 0.45  # the same bar the monitor uses to group outlets into one story
+_NUM = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def _numbers(title: str) -> set[str]:
+    """Figures in a headline ('$950M' -> '950', '2,500' -> '2500'); years don't count."""
+    out = set()
+    for m in _NUM.findall(title or ""):
+        n = m.replace(",", "")
+        if n.isdigit() and len(n) == 4 and 1990 <= int(n) <= 2100:
+            continue
+        out.add(n.rstrip("0").rstrip(".") if "." in n else n)
+    return out
+
+
+class EventIndex:
+    """Recent coverage, searchable by headline: finds the earliest report of an event even when the monitor filed
+    a later repost as its own story (different wording, or outside its 36-hour grouping window)."""
+
+    def __init__(self, rows: list[dict]):
+        from xcp.sources.rss import title_tokens
+
+        self.rows: list[dict] = []
+        self.postings: dict[str, list[int]] = {}
+        for r in rows:
+            toks = title_tokens(r["title"])
+            if len(toks) < (5 if r.get("kind") == "x_post" else 3) or r.get("at") is None:
+                continue  # an X post only counts as a first report when it reads like a headline
+            i = len(self.rows)
+            self.rows.append({**r, "toks": toks, "nums": _numbers(r["title"])})
+            for t in toks:
+                self.postings.setdefault(t, []).append(i)
+        self.max_df = max(40, len(self.rows) // 20)  # words in >5% of headlines ('bitcoin') can't nominate a match
+        self._memo: dict = {}
+
+    def origin(self, title: str, before: datetime | None, hops: int = 2) -> dict | None:
+        """The earliest earlier report of the same event, or None. Two headlines that both carry figures but share
+        none are different events (this week's buy vs last week's)."""
+        from xcp.sources.rss import title_tokens
+
+        if before is None:
+            return None
+        key = (title, before, hops)
+        if key in self._memo:
+            return self._memo[key]
+        toks, nums = title_tokens(title), _numbers(title)
+        best = None
+        if len(toks) >= 3:
+            votes: dict[int, int] = {}
+            for t in toks:
+                post = self.postings.get(t, ())
+                if len(post) <= self.max_df:
+                    for i in post:
+                        votes[i] = votes.get(i, 0) + 1
+            for i, n in votes.items():
+                if n < 2:
+                    continue
+                r = self.rows[i]
+                if r["at"] >= before - timedelta(minutes=1):
+                    continue
+                shared = len(toks & r["toks"])
+                if shared < 3 or shared / len(toks | r["toks"]) < ORIGIN_SIM:
+                    continue
+                if nums and r["nums"] and not nums & r["nums"]:
+                    continue
+                if best is None or r["at"] < best["at"]:
+                    best = r
+            if best is not None and hops > 1:  # a repost of a repost: follow it back once more
+                earlier = self.origin(best["title"], best["at"], hops - 1)
+                if earlier is not None and earlier["at"] < best["at"]:
+                    best = earlier
+        self._memo[key] = best
+        return best
+
+
+def load_event_index(days: int = ORIGIN_DAYS) -> EventIndex:
+    """Headlines and X posts published in the last `days` (one light query: no bodies beyond an X post's text)."""
+    since = utcnow() - timedelta(days=days)
+    when = func.coalesce(db.Item.created_at, db.Item.fetched_at)
+    with db.session() as s:
+        rows = s.execute(select(db.Item.kind, db.Item.text, db.Item.meta, db.Item.created_at, db.Item.fetched_at,
+                                db.Item.author, db.Item.source, db.Item.url)
+                         .where(when >= since, db.Item.kind.in_(["news", "filing", "x_post"]))).all()
+    return EventIndex([{"title": (meta or {}).get("title") or (text or "").split("\n", 1)[0][:200],
+                        "at": aware(created or fetched), "url": url or "", "kind": kind,
+                        "publisher": f"@{author}" if kind == "x_post" else (author or source or "")}
+                       for kind, text, meta, created, fetched, author, source, url in rows])
+
+
+def stamp(idea: dict, index: EventIndex | None = None) -> dict:
+    """Set idea['surfaced'] (when the underlying event first surfaced: its earliest coverage anywhere we've seen)
+    and idea['surfaced_via'] (that first report). 'newest' stays the latest coverage."""
+    dated = [x for x in idea.get("items", []) if x.get("at")]
+    first = min(dated, key=lambda x: parse_iso(x["at"])) if dated else None
+    at = parse_iso(first["at"]) if first else parse_iso(idea.get("newest"))
+    via = first
+    if index is not None:  # search by headlines only: a post's first line isn't a headline
+        for x in [x for x in dated if x.get("kind") != "x_post"][:6]:
+            o = index.origin(x["title"], parse_iso(x["at"]))
+            if o is not None and (at is None or o["at"] < at):
+                at, via = o["at"], {"title": o["title"], "url": o["url"], "publisher": o["publisher"],
+                                    "kind": o["kind"], "at": o["at"].isoformat()}
+    idea["surfaced"] = at.isoformat() if at else None
+    idea["surfaced_via"] = {k: via.get(k) for k in ("title", "url", "publisher", "kind", "at")} if via else None
+    return idea
+
+
 def _publisher(it: db.Item) -> str:
     return f"@{it.author}" if it.kind == "x_post" else (it.author or it.source or "")
 
@@ -150,8 +261,10 @@ def load_briefs(since_hours: int = 60, statuses_out: tuple[str, ...] = ("dismiss
     return [from_brief(b, items) for b in rows]
 
 
-def assign(stories: list[dict], briefs: list[dict], occs: list[dict], now: datetime | None = None) -> dict[str, list]:
-    """occurrence key -> ideas, best first (desk picks, then priority stories, then by score)."""
+def assign(stories: list[dict], briefs: list[dict], occs: list[dict], now: datetime | None = None,
+           index: EventIndex | None = None) -> dict[str, list]:
+    """occurrence key -> ideas, best first (desk picks, then priority stories, then by score). With an index, every
+    idea is stamped with when its event first surfaced."""
     now = now or now_ny()
     out: dict[str, list] = {o["key"]: [] for o in occs}
     covered: set[str] = set()
@@ -165,7 +278,7 @@ def assign(stories: list[dict], briefs: list[dict], occs: list[dict], now: datet
             fresh = parse_iso(b["newest"]) > utcnow() - timedelta(hours=HORIZON_HOURS)
             k = next((o["key"] for o in occs if not o["passed"] and o["lane"] == lane), None) if fresh else None
         if k:
-            out[k].append(b)
+            out[k].append(stamp(b, index))
             covered.update(b.get("item_ids", []))
     last_passed: dict[str, datetime] = {}
     for o in occs:
@@ -188,7 +301,7 @@ def assign(stories: list[dict], briefs: list[dict], occs: list[dict], now: datet
         since = min(window, last_passed[lane]) if lane in last_passed else window
         if c["newest"] < since:
             continue
-        out[target["key"]].append(from_story(c))
+        out[target["key"]].append(stamp(from_story(c), index))
     for k, ideas in out.items():
         ideas.sort(key=lambda x: (x["kind"] == "brief", x["hot"], x["score"]), reverse=True)
     return out

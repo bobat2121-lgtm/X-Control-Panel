@@ -17,7 +17,7 @@ Taken {{snapshot_time}}.
 {{recent}}
 
 ## Items, highest-signal first
-Format: id | kind | source (followers) | age | engagement | text | url. Items tagged [watchlist] are from the owner's watchlist; [priority: ...] marks the monitor's flags; [+N outlets] means other outlets carry the same story.
+Format: id | kind | source (followers) | age | engagement | text | url. Items tagged [watchlist] are from the owner's watchlist; [priority: ...] marks the monitor's flags; [+N outlets] means other outlets carry the same story. [event first surfaced …] means this item is a later report of an event that first appeared then: date the event by that time, never call it new, breaking or "this morning", and only brief it if something genuinely new was added.
 {{items}}
 
 ## Your job

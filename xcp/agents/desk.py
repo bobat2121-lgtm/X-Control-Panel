@@ -11,10 +11,10 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
-from xcp import config, db, llm, notify
+from xcp import config, db, ideas, llm, notify
 from xcp.agents import collect, context, editor, monitor
 from xcp.sources import market
-from xcp.timeutil import dayname, fmt_ago, now_ny, today_ny, utcnow
+from xcp.timeutil import aware, dayname, fmt_ago, now_ny, parse_iso, today_ny, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -29,9 +29,11 @@ HOURS = {"premarket": 16, "ai_noon": 24, "midday": 6, "friday_close": 8}
 N_STORIES = {"premarket": 6, "ai_noon": 4, "midday": 5, "friday_close": 5}
 
 
-def _item_line(it: db.Item, publishers: int, max_chars: int) -> str:
+def _item_line(it: db.Item, publishers: int, max_chars: int, surfaced=None) -> str:
     m = it.meta or {}
     tags = []
+    if surfaced is not None and aware(it.created_at or it.fetched_at) - surfaced > timedelta(hours=3):
+        tags.append(f"[event first surfaced {fmt_ago(surfaced)}: older news, not breaking]")
     if m.get("watchlist"):
         tags.append("[watchlist]")
     if m.get("priority"):
@@ -74,14 +76,16 @@ def run_desk(slot: str) -> dict:
     for c in stories:  # the slot's lane leads (the noon slot is the AI lane)
         c["rank"] = c["score"] * (1.5 if c["lead"].lane == lane else 1.0)
     stories.sort(key=lambda c: -c["rank"])
+    index = ideas.load_event_index()  # so an old event's fresh repost isn't briefed as breaking
     limit = int(settings.get("limits", {}).get("items_to_llm", 120))
     max_chars = int(settings.get("limits", {}).get("item_text_chars", 600))
     lines, by_id = [], {}
     for c in stories:
+        surfaced = ideas.stamp(ideas.from_story(c), index).get("surfaced")
         for it in [c["lead"]] + [m for m in c["members"] if m is not c["lead"]][:2]:
             if len(lines) >= limit:
                 break
-            lines.append(_item_line(it, c["publishers"], max_chars))
+            lines.append(_item_line(it, c["publishers"], max_chars, parse_iso(surfaced)))
             by_id[it.id] = it
     n = int(spec.get("desk_stories") or N_STORIES.get(slot, 5))
     watch = ", ".join("@" + a["handle"].lstrip("@") for a in config.get("watchlist").get("accounts", []))

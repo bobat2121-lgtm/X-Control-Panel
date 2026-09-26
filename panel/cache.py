@@ -23,14 +23,21 @@ def _group(key) -> Any:
     return key[0] if isinstance(key, tuple) else key
 
 
-def get(key, fn: Callable[[], Any], ttl: float) -> Any:
+def get(key, fn: Callable[[], Any], ttl: float, wait: bool = True) -> Any:
+    """wait=False: on the very first read, start the fetch in the background and return None meanwhile."""
     now = time.monotonic()
     with _lock:
         hit = _store.get(key)
         stale = hit is not None and now - hit[1] > ttl and key not in _busy
-        if stale:
+        first_bg = hit is None and not wait and key not in _busy
+        if stale or first_bg:
             _busy.add(key)
+        elif hit is None and not wait:
+            return None  # already being fetched
         gen = _gen.get(_group(key), 0)
+    if first_bg:
+        threading.Thread(target=_refresh, args=(key, fn, gen), daemon=True).start()
+        return None
     if hit is None:
         val = fn()
         with _lock:

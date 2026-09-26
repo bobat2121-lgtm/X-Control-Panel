@@ -272,7 +272,7 @@ hr { border-color: var(--ink) !important; opacity: .25; }
 
 /* Streamlit pulls every markdown block up by 1rem (to eat a paragraph's margin); plain HTML blocks have none. */
 [data-testid="stMarkdownContainer"]:has(> .xcp-poston, > .xcp-lbl, > .xcp-slot, > .xcp-news, > .xcp-idea-h, > .xcp-comp-h,
-  > .xcp-muted, > .xcp-chips) { margin-bottom: 0 !important; }
+  > .xcp-muted, > .xcp-chips, > .xcp-surf) { margin-bottom: 0 !important; }
 .xcp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 1px 0 3px; }
 .xcp-chips .xcp-badge { margin: 0; }
 
@@ -363,6 +363,13 @@ hr { border-color: var(--ink) !important; opacity: .25; }
 .xcp-lbl::before { content: ""; width: 14px; height: 4px; background: var(--olive); }
 .xcp-lbl::after { content: ""; flex: 1; height: 1px; background: repeating-linear-gradient(90deg, var(--ink) 0 3px, transparent 3px 6px);
   opacity: .35; }
+.xcp-surf { font-family: var(--xp); font-size: 12px; color: var(--ink3); margin: 0 0 6px; line-height: 1.6; }
+.xcp-surf b { font-family: var(--pixel); font-weight: 400; font-size: 9.5px; letter-spacing: .06em; background: var(--olive);
+  color: #fff; padding: 1px 6px; margin-right: 6px; }
+.xcp-surf a { color: var(--ink); font-weight: 700; text-decoration: underline; text-decoration-color: var(--olive);
+  text-decoration-thickness: 2px; text-underline-offset: 2px; }
+.xcp-surf .t { color: var(--mute); font-style: italic; }
+.xcp-news .src b.first { background: var(--olive); color: #fff; }
 .xcp-news { border: 1px solid var(--ink); border-left: 5px solid var(--tan); background: var(--cream); padding: 9px 12px 8px;
   margin: 8px 0; border-radius: 2px; }
 .xcp-news:hover { border-left-color: var(--olive); }

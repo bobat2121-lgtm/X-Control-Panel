@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -23,7 +23,7 @@ MON_9AM = datetime(2026, 9, 28, 9, 0, tzinfo=NY)
 def _item(s, iid, title, kind="news", at=MON_9AM - timedelta(minutes=30), lane="btc", pillar=None, author="Reuters",
           **meta):
     row, _ = collect.upsert_item(s, id=iid, kind=kind, source="feed", text=title, url=f"https://x.test/{iid}",
-                                 author=author, author_name=author, created_at=at,
+                                 author=author, author_name=author, created_at=at.astimezone(timezone.utc),
                                  lane_hint=lane, pillar_hint=pillar, meta={"title": title, **meta})
     return row
 
@@ -92,6 +92,45 @@ class Assign(Base):
         b = {"key": "b", "title": "Tether, Circle freeze wallets tied to Bitget exploit", "newest": "2"}
         c = {"key": "c", "title": "Waymo expands to Denver", "newest": "3"}
         self.assertEqual([x["key"] for x in ideas.related(a, [a, b, c])], ["b"])
+
+
+class Surfaced(Base):
+    """An idea's time is when its event first surfaced, not when the latest repost landed."""
+
+    def test_a_repost_is_dated_by_the_first_report(self):
+        with db.session() as s:
+            _item(s, "orig", "Fed proposes reserve and capital rules for stablecoin issuers under GENIUS Act",
+                  at=MON_9AM - timedelta(days=3), pillar="stablecoins", author="Reuters")
+            _item(s, "repost", "Fed proposes capital and reserve rules for stablecoin issuers, GENIUS Act",
+                  at=MON_9AM - timedelta(hours=2), pillar="stablecoins", author="Cryptonews")
+            s.commit()
+        index = ideas.load_event_index(days=30)
+        repost = next(c for c in monitor.stream(hours=24 * 10) if c["lead"].id == "repost")
+        idea = ideas.stamp(ideas.from_story(repost), index)
+        self.assertEqual(idea["surfaced"][:10], (MON_9AM - timedelta(days=3)).astimezone(timezone.utc).date().isoformat())
+        self.assertEqual(idea["surfaced_via"]["publisher"], "Reuters")
+
+    def test_recurring_headlines_with_different_figures_are_different_events(self):
+        with db.session() as s:
+            _item(s, "w1", "Strategy acquires 1,000 BTC for $85 million in weekly purchase",
+                  at=MON_9AM - timedelta(days=7), pillar="digital_credit")
+            _item(s, "w2", "Strategy acquires 2,500 BTC for $210 million in weekly purchase",
+                  at=MON_9AM - timedelta(hours=1), pillar="digital_credit")
+            s.commit()
+        index = ideas.load_event_index(days=30)
+        this_week = next(c for c in monitor.stream(hours=24 * 10) if c["lead"].id == "w2")
+        idea = ideas.stamp(ideas.from_story(this_week), index)
+        self.assertIsNone(index.origin("Strategy acquires 2,500 BTC for $210 million in weekly purchase",
+                                       MON_9AM - timedelta(hours=1)))
+        self.assertEqual(idea["surfaced_via"]["publisher"], "Reuters")  # its own report
+        self.assertEqual(idea["surfaced"], idea["items"][0]["at"])
+
+    def test_a_post_first_line_is_not_a_headline(self):
+        with db.session() as s:
+            _item(s, "t1", "I am a shareholder of both $MSTR and $ASST.", kind="x_post",
+                  at=MON_9AM - timedelta(days=9), author="someone")
+            s.commit()
+        self.assertEqual(ideas.load_event_index(days=30).rows, [])  # too short to stand as a first report
 
 
 class Alerts(Base):

@@ -16,7 +16,7 @@ from panel.common import (PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, hero
                           pillar_badge)
 from xcp import config, db, gh, ideas, showcase, xtext
 from xcp.agents import monitor
-from xcp.timeutil import fmt_ago, fmt_ny, now_ny, parse_iso, today_ny, utcnow
+from xcp.timeutil import aware, fmt_ago, fmt_ny, now_ny, parse_iso, today_ny, utcnow
 
 PILLARS = config.pillars()
 LABEL = {k: v.get("label", k) for k, v in PILLARS.items()}
@@ -184,9 +184,23 @@ def _domain(u: str) -> str:
         return ""
 
 
+GAP_HOURS = 3  # show "latest …" too when newer coverage came this much later than the first report
+
+
+def _surfaced(idea: dict):
+    """When the underlying event first surfaced (its earliest coverage), not when the latest repost landed."""
+    s = parse_iso(idea.get("surfaced"))
+    if s is None:  # pinned before first-surfaced times existed
+        dated = [parse_iso(x["at"]) for x in idea.get("items", []) if x.get("at")]
+        s = min(dated) if dated else parse_iso(idea.get("newest"))
+    return s
+
+
 def _is_new(idea: dict) -> bool:
-    first, newest = parse_iso(idea.get("first_seen")), parse_iso(idea.get("newest"))
-    return bool(first and newest and utcnow() - first < timedelta(minutes=30) and utcnow() - newest < timedelta(hours=3))
+    """NEW! only when the event itself is under three hours old (a fresh repost of old news doesn't count)."""
+    first, surfaced = parse_iso(idea.get("first_seen")), _surfaced(idea)
+    return bool(first and surfaced and utcnow() - first < timedelta(minutes=30)
+                and utcnow() - surfaced < timedelta(hours=GAP_HOURS))
 
 
 def _cat(pillar: str) -> str:
@@ -213,17 +227,39 @@ def _chips(idea: dict, full: bool = False) -> str:
 def _meta(idea: dict) -> str:
     items = idea.get("items", [])
     lead = items[0] if items else {}
-    when = parse_iso(idea.get("newest"))
+    surfaced, newest = _surfaced(idea), parse_iso(idea.get("newest"))
     n = len(items)
     bits = [f"{n} source{'s' if n != 1 else ''}"] if n else []
     if lead.get("publisher"):
         bits.append(lead["publisher"])
-    if when:
-        bits.append(("desk " if idea["kind"] == "brief" else "") + fmt_ago(when))
+    if surfaced:
+        bits.append(f"surfaced {fmt_ago(surfaced)}")
+        latest = max([parse_iso(x["at"]) for x in items if x.get("at")] or [newest or surfaced])
+        if latest - surfaced > timedelta(hours=GAP_HOURS):
+            bits.append(f"latest {fmt_ago(latest)}")
     return " · ".join(bits)
 
 
-def _news_html(items: list[dict]) -> str:
+def _surfaced_html(idea: dict) -> str:
+    """The opened idea's time line: when and where the event first surfaced, and the latest coverage."""
+    at = _surfaced(idea)
+    if at is None:
+        return ""
+    via = idea.get("surfaced_via") or {}
+    url = _url(via.get("url"))
+    who = esc_html(via.get("publisher") or _domain(url) or "")
+    src = (f' · first report: <a href="{esc_html(url)}" target="_blank" rel="noopener">{who} ↗</a>' if url and who
+           else (f" · first report: {who}" if who else ""))
+    if via.get("title") and url not in {x.get("url") for x in idea.get("items", [])}:
+        src += f' <span class="t">"{esc_html(via["title"][:120])}"</span>'  # found in earlier, separate coverage
+    items = [parse_iso(x["at"]) for x in idea.get("items", []) if x.get("at")]
+    latest = max(items) if items else parse_iso(idea.get("newest"))
+    tail = (f" · latest coverage {fmt_ago(latest)}" if latest and latest - at > timedelta(hours=GAP_HOURS) else "")
+    return (f'<div class="xcp-surf"><b>FIRST SURFACED</b> {fmt_ny(at, "%a %b %d, %I:%M %p").replace(", 0", ", ")} ET · {fmt_ago(at)}'
+            f'{src}{tail}</div>')
+
+
+def _news_html(items: list[dict], first_url: str | None = None) -> str:
     out = []
     for x in items:
         url = _url(x.get("url"))
@@ -235,7 +271,9 @@ def _news_html(items: list[dict]) -> str:
         if url and _domain(url):
             src.append(esc_html(_domain(url)))
         if at:
-            src.append(fmt_ago(at))
+            src.append(f"{'posted' if x.get('kind') == 'x_post' else 'published'} {fmt_ago(at)}")
+        if first_url and url == first_url:
+            src.append("<b class='first'>FIRST REPORT</b>")
         if x.get("official"):
             src.append("official")
         mt = x.get("metrics") or {}
@@ -256,6 +294,8 @@ def _lbl(text: str) -> None:
 def idea_body(idea: dict) -> None:
     st.markdown(_chips(idea, full=True), unsafe_allow_html=True)
     st.markdown(f'<div class="xcp-idea-h">{esc_html(idea["title"])}</div>', unsafe_allow_html=True)
+    if (line := _surfaced_html(idea)):
+        st.markdown(line, unsafe_allow_html=True)
     if idea.get("what"):
         _lbl("What happened")
         st.markdown(esc_md(idea["what"]))
@@ -273,7 +313,9 @@ def idea_body(idea: dict) -> None:
         st.markdown("\n".join(f"- {esc_md(a)}" for a in idea["angles"]))
     items = idea.get("items", [])
     _lbl(f"The news · {len(items)} source{'s' if len(items) != 1 else ''}")
-    st.markdown(_news_html(items) or "<div class='xcp-muted'>No sources on file.</div>", unsafe_allow_html=True)
+    first_url = (idea.get("surfaced_via") or {}).get("url")
+    st.markdown(_news_html(items, first_url) or "<div class='xcp-muted'>No sources on file.</div>",
+                unsafe_allow_html=True)
     more = ideas.related(idea, POOL)
     if more:
         _lbl(f"More on this · {len(more)} related stor{'ies' if len(more) != 1 else 'y'}")
@@ -414,14 +456,18 @@ def slot_header(o: dict, n: int, first_up: bool, now) -> None:
 def story_card(c: dict, where: str = "live") -> None:
     lead = c["lead"]
     published = lead.created_at or lead.fetched_at
-    idea = ideas.from_story(c)
+    idea = ideas.stamp(ideas.from_story(c), INDEX)
     with st.container(border=True, key=card_key("hot" if c["priority"] else "card", f"{where}_{c['key']}")):
         body, side = (st.container(), None) if not owner else st.columns([7, 2.1], vertical_alignment="center")
         with body:
             who = f"@{lead.author}" if lead.kind == "x_post" else (lead.author or lead.source)
             more = f" · +{c['publishers'] - 1} outlets" if c["publishers"] > 1 else ""
+            when = f"{'posted' if lead.kind == 'x_post' else 'published'} {fmt_ago(published)}"
+            surfaced = _surfaced(idea)
+            if surfaced and aware(published) - surfaced > timedelta(hours=GAP_HOURS):
+                when += f" · story first surfaced {fmt_ago(surfaced)}"
             st.markdown(f"{pillar_badge(c['pillar'])} {_chips(idea)} <span class='xcp-muted'>{esc_html(who)} · "
-                        f"{fmt_ago(published)}{more}</span>", unsafe_allow_html=True)
+                        f"{when}{more}</span>", unsafe_allow_html=True)
             if lead.kind == "x_post":
                 mt = lead.metrics or {}
                 st.markdown(esc_md(" ".join((lead.text or "").split())[:500]))
@@ -434,7 +480,8 @@ def story_card(c: dict, where: str = "live") -> None:
                     st.caption(snippet)
             if c["publishers"] > 1:
                 with st.expander(f"{c['publishers']} outlets on this"):
-                    st.markdown(_news_html(idea["items"]), unsafe_allow_html=True)
+                    st.markdown(_news_html(idea["items"], (idea.get("surfaced_via") or {}).get("url")),
+                                unsafe_allow_html=True)
         if owner:
             with side:
                 with st.container(horizontal=True, horizontal_alignment="right", gap="small"):
@@ -474,7 +521,8 @@ now = now_ny()
 last = last_monitor_run()
 occs = ideas.occurrences(now)
 stories72 = _stream(72)
-groups = ideas.assign(stories72, _briefs(), occs, now)
+INDEX = cache.get("event_index", ideas.load_event_index, ttl=600, wait=False)  # 14 days of headlines
+groups = ideas.assign(stories72, _briefs(), occs, now, INDEX)
 POOL = [x for L in groups.values() for x in L]  # for "More on this" under an opened idea
 upcoming = [o for o in occs if not o["passed"]]
 nxt = upcoming[0] if upcoming else None
@@ -548,7 +596,7 @@ elif view == VIEWS[1]:
                        format_func=lambda k: by_key[k]["title"][:46] + ("…" if len(by_key[k]["title"]) > 46 else ""))
         idea = by_key[sel or keys[0]]
         fresh = {x["key"]: x for L in groups.values() for x in L}  # newer outlets / numbers since it was pinned
-        idea = fresh.get(idea["key"], idea)
+        idea = fresh.get(idea["key"]) or ideas.stamp(dict(idea), INDEX)
         left, right = st.columns([1.4, 1], gap="large")
         with left:
             with st.container(height=700, key="wr_scroll"):
@@ -632,8 +680,9 @@ elif view == VIEWS[3]:
 
 # ------------------------------------------------------------------ ⭐ saved
 else:
-    saved = [ideas.from_story(c) for c in _stream(24 * 7, include_offtopic=True) if c["status"] == "saved"]
-    saved_b = [b for b in _saved_briefs() if b["status"] == "saved"]
+    saved = [ideas.stamp(ideas.from_story(c), INDEX) for c in _stream(24 * 7, include_offtopic=True)
+             if c["status"] == "saved"]
+    saved_b = [ideas.stamp(b, INDEX) for b in _saved_briefs() if b["status"] == "saved"]
     items = saved_b + sorted(saved, key=lambda x: x["newest"], reverse=True)
     if not items:
         st.info("Nothing saved yet. Press ☆ Save on any idea.", icon="⭐")
