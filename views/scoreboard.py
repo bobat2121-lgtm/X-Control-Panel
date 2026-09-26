@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
+from panel import cache
 from panel.common import esc_md, hero, is_owner, section
 from xcp import config, db
 from xcp.agents import analyst
@@ -18,11 +19,19 @@ TARGET_LABELS = {"digital_credit": "Digital credit", "bitcoin": "Bitcoin", "macr
 PALETTE = ["#0E0E0C", "#CDB891", "#8C8572", "#6B7A26"]  # ink, tan, mute, olive (the accent series)
 
 days = int(st.session_state.get("sb_days") or 30)
-since = utcnow() - timedelta(days=days)
-with db.session() as s:
-    posts = list(s.scalars(select(db.Post).where(db.Post.posted_at >= since).order_by(db.Post.posted_at.desc())).all())
-    drafts = list(s.scalars(select(db.Draft).where(db.Draft.created_at >= since,
-                                                   db.Draft.kind.in_(["regular", "showcase"]))).all())
+
+
+def _fetch(days: int) -> tuple[list, list]:
+    since = utcnow() - timedelta(days=days)
+    with db.session() as s:
+        posts = list(s.scalars(select(db.Post).where(db.Post.posted_at >= since)
+                               .order_by(db.Post.posted_at.desc())).all())
+        drafts = list(s.scalars(select(db.Draft).where(db.Draft.created_at >= since,
+                                                       db.Draft.kind.in_(["regular", "showcase"]))).all())
+    return posts, drafts
+
+
+posts, drafts = cache.get(("score", days), lambda: _fetch(days), ttl=120)  # metrics import nightly
 
 rows = []
 for p in posts:
@@ -89,7 +98,7 @@ if reasons:
     st.caption("Why drafts got dismissed (fed back to the writer through your edits and choices)")
     st.bar_chart(pd.Series(reasons), height=180, color="#CDB891")
 
-memo = db.kv_get("weekly_memo")
+memo = cache.get(("score", "memo"), lambda: db.kv_get("weekly_memo"), ttl=300)
 if memo and memo.get("text"):
     section("Weekly memo", memo.get("date", ""))
     st.markdown(esc_md(memo["text"]))
@@ -104,4 +113,5 @@ if is_owner():
             if st.form_submit_button("Log") and (url or text):
                 p = classify(text)[1] if pillar == "(auto)" else pillar
                 analyst.log_post(None, url, text, p, tone, None)
+                cache.bust("score", "feed")
                 st.rerun()

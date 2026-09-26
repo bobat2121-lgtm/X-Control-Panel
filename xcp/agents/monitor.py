@@ -33,11 +33,11 @@ PILLAR_COLORS = {"digital_credit": 0xF7931A, "stablecoins": 0x26A17B, "legislati
 
 
 def cfg() -> dict:
-    return config.settings().get("monitor", {})
+    return config.view("settings").get("monitor", {})  # read-only: called once per story
 
 
 def watchlist_handles() -> set[str]:
-    return {a["handle"].lstrip("@").lower() for a in config.get("watchlist").get("accounts", []) if a.get("handle")}
+    return {a["handle"].lstrip("@").lower() for a in config.view("watchlist").get("accounts", []) if a.get("handle")}
 
 
 # ------------------------------------------------------------------ ingest

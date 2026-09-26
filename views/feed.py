@@ -6,6 +6,7 @@ from datetime import timedelta
 import streamlit as st
 from sqlalchemy import select
 
+from panel import cache
 from panel.common import (STATUS_ICONS, badge, card_key, enqueue, esc_html, esc_md, handle, hero, is_owner, pillar_badge,
                           section)
 from xcp import charts, config, db, gh, showcase, xtext
@@ -26,6 +27,47 @@ def slot_label(key: str) -> str:
     return SLOTS.get(key, {}).get("label", "✍️ On demand" if key == "on_demand" else key)
 
 
+# ------------------------------------------------------------------ data (one batched load, cached; writes bust it)
+
+FEED_TTL = 30  # AI rewrites finishing in the cloud show up within this
+
+
+def _fetch_day(day_iso: str, bank: bool) -> dict:
+    """Drafts for a day (or the evergreen bank) with their options, history, requests, builds and showcase runs:
+    five queries in all, instead of four per card."""
+    with db.session() as s:
+        q = select(db.Draft).where(db.Draft.kind.in_(["regular", "showcase"]))
+        q = q.where(db.Draft.status == "banked") if bank else q.where(db.Draft.slot_date == day_iso)
+        drafts = list(s.scalars(q).all())
+        ids = [d.id for d in drafts]
+        variants = list(s.scalars(select(db.Variant).where(db.Variant.draft_id.in_(ids))
+                                  .order_by(db.Variant.version.desc())).all()) if ids else []
+        pending = db.pending_requests(s)
+        idea_ids = [d.build_idea_id for d in drafts if d.build_idea_id]
+        ideas = ({i.id: i for i in s.scalars(select(db.BuildIdea).where(db.BuildIdea.id.in_(idea_ids)))}
+                 if idea_ids else {})
+        runs = ({r.draft_id: r for r in s.scalars(select(db.ShowcaseRun).where(db.ShowcaseRun.draft_id.in_(ids))
+                                                  .order_by(db.ShowcaseRun.id))} if ids else {})
+    current: dict[int, list] = {}
+    history: dict[tuple, list] = {}
+    for v in variants:
+        if v.is_current:
+            current.setdefault(v.draft_id, []).append(v)
+        history.setdefault((v.draft_id, v.label), []).append(v)
+    for vs in current.values():
+        vs.sort(key=lambda v: v.label)
+    return {"drafts": drafts, "current": current, "history": history, "pending": pending, "ideas": ideas,
+            "runs": runs}
+
+
+def _day(day_iso: str, bank: bool = False) -> dict:
+    return cache.get(("feed", "day", day_iso, bank), lambda: _fetch_day(day_iso, bank), ttl=FEED_TTL)
+
+
+def _changed() -> None:
+    cache.bust("feed", "score")
+
+
 # ------------------------------------------------------------------ callbacks
 
 def _save_edit(draft_id: int, label: str, style: str, key: str) -> None:
@@ -40,6 +82,7 @@ def _save_edit(draft_id: int, label: str, style: str, key: str) -> None:
         if d.status in ("new", "snoozed"):
             d.status = "edited"
         s.commit()
+    _changed()
     st.toast("Saved", icon="💾")
 
 
@@ -52,6 +95,7 @@ def _local_tool(draft_id: int, label: str, style: str, key: str, tool: str) -> N
     with db.session() as s:
         db.add_variant_version(s, draft_id, label, parts, "thread" if len(parts) > 1 else style, f"tool:{tool}")
         s.commit()
+    _changed()
 
 
 def _rewrite(draft_id: int, label: str, preset: str, instruction: str = "") -> None:
@@ -84,6 +128,7 @@ def _mark_posted(draft_id: int, label: str, text_key: str, url_key: str) -> None
         s.commit()
         pillar, tone, kind, style = d.pillar, d.tone, d.kind, v.style if v else None
     analyst.log_post(draft_id, url, text.replace(xtext.THREAD_SEP, "\n\n"), pillar, tone, style, kind)
+    _changed()
     st.toast("Logged as posted. It counts toward your mix now.", icon="✅")
 
 
@@ -94,6 +139,7 @@ def _set_status(draft_id: int, status: str, reason_key: str | None = None) -> No
         if reason_key:
             d.dismiss_reason = st.session_state.get(reason_key)
         s.commit()
+    _changed()
 
 
 def _snooze(draft_id: int) -> None:
@@ -109,6 +155,7 @@ def _snooze(draft_id: int) -> None:
                 if days_match(spec.get("days"), day) and at_ny(day, spec["post_at"]) > now:
                     d.slot, d.slot_date, d.status = key, day.isoformat(), "snoozed"
                     s.commit()
+                    _changed()
                     st.toast(f"Snoozed to {slot_label(key)} {day:%a}", icon="⏰")
                     return
 
@@ -117,6 +164,7 @@ def _restore(draft_id: int, label: str, parts: list[str], style: str, version: i
     with db.session() as s:
         db.add_variant_version(s, draft_id, label, parts, style, f"restore:v{version}")
         s.commit()
+    _changed()
 
 
 # ------------------------------------------------------------------ card
@@ -203,12 +251,11 @@ def _showcase_image(run: db.ShowcaseRun) -> None:
         st.caption(f"⚠️ {esc_md(w.get('detail', ''))}")
 
 
-def render_draft(d: db.Draft) -> None:
-    with db.session() as s:
-        variants = db.current_variants(s, d.id)
-        pending = db.pending_requests(s, d.id)
-        idea = s.get(db.BuildIdea, d.build_idea_id) if d.build_idea_id else None
-        sc_run = showcase.run_for_draft(s, d.id) if d.kind == "showcase" else None
+def render_draft(d: db.Draft, data: dict) -> None:
+    variants = data["current"].get(d.id, [])
+    pending = [r for r in data["pending"] if (r.payload or {}).get("draft_id") == d.id]
+    idea = data["ideas"].get(d.build_idea_id) if d.build_idea_id else None
+    sc_run = data["runs"].get(d.id) if d.kind == "showcase" else None
     if not variants:
         return
     by_label = {v.label: v for v in variants}
@@ -290,10 +337,7 @@ def render_draft(d: db.Draft) -> None:
                         st.info(caption)
 
         with st.expander("Version history"):
-            with db.session() as s:
-                hist = s.scalars(select(db.Variant).where(db.Variant.draft_id == d.id, db.Variant.label == v.label)
-                                 .order_by(db.Variant.version.desc())).all()
-            for h in hist:
+            for h in data["history"].get((d.id, v.label), []):
                 cols = st.columns([5, 1])
                 cols[0].markdown(f"**v{h.version}** · {h.created_by} · {fmt_ny(h.created_at)}  \n"
                                  f"{esc_md(xtext.join_parts(h.parts)[:280])}")
@@ -305,9 +349,7 @@ def render_draft(d: db.Draft) -> None:
 # ------------------------------------------------------------------ page
 
 _today = today_ny()
-with db.session() as _s:
-    _mine = [x for x in _s.scalars(select(db.Draft).where(db.Draft.slot_date == _today.isoformat())).all()
-             if x.status != "dismissed" and x.kind in ("regular", "showcase")]
+_mine = [x for x in _day(_today.isoformat())["drafts"] if x.status != "dismissed"]
 _now = now_ny()
 _next = None
 for _off in range(0, 8):
@@ -317,7 +359,7 @@ for _off in range(0, 8):
     if _cands:
         _next = min(_cands)
         break
-_mix = analyst.mix(7)
+_mix = cache.get(("feed", "mix"), lambda: analyst.mix(7), ttl=120)
 _ai = _mix["shares"].get("ai", 0.0)
 hero("FEED.EXE", "Your posts, <em>ready to ship</em>.",
      "Everything you've written from the Monitor, plus showcase images. Edit, post, mark it posted, and it joins "
@@ -332,8 +374,7 @@ hero("FEED.EXE", "Your posts, <em>ready to ship</em>.",
 top = st.columns([1.15, 1.5, 1.35], gap="large")
 with top[0]:
     day = st.date_input("Day", value=today_ny(), format="MM/DD/YYYY")
-    with db.session() as s:
-        day_drafts = s.scalars(select(db.Draft).where(db.Draft.slot_date == day.isoformat())).all()
+    day_drafts = _day(day.isoformat())["drafts"]
     for key, spec in SLOTS.items():
         if not days_match(spec.get("days"), day):
             continue
@@ -343,7 +384,7 @@ with top[0]:
         st.markdown(f"{'✅' if posted else '⬜'} **{spec['label']}** at {spec['post_at']}{extra}")
 
 with top[1]:
-    m = analyst.mix(7)
+    m = _mix
     st.markdown(f"**Mix meter** · last 7 days · {m['total']} posts")
     for group, target in m["targets"].items():
         share = m["shares"].get(group, 0.0)
@@ -369,8 +410,7 @@ with top[2]:
         sc = f" · 🛠 {showcase.title(showcase.panel_for(t.date()))}" if showcase.is_showcase(key, t.date()) else ""
         st.metric("Next slot", f"{slot_label(key)} {t.strftime('%I:%M %p').lstrip('0')}",
                   f"in {mins // 60}h {mins % 60}m{sc}", delta_color="off")
-    with db.session() as s:
-        n_pending = len(db.pending_requests(s))
+    n_pending = len(_day(_today.isoformat())["pending"])
     if n_pending:
         st.caption(f"⏳ {n_pending} AI request(s) queued or running")
     if is_owner():
@@ -397,9 +437,14 @@ def _recheck(panel: str) -> None:
 
 # today's showcase status
 sc_panel = showcase.panel_for(day)
-if sc_panel:
+def _fetch_run(day_iso: str, panel: str):
     with db.session() as s:
-        sc_run = showcase.run_for(s, day.isoformat(), sc_panel)
+        return showcase.run_for(s, day_iso, panel)
+
+
+if sc_panel:
+    sc_run = cache.get(("feed", "scrun", day.isoformat(), sc_panel), lambda: _fetch_run(day.isoformat(), sc_panel),
+                       ttl=FEED_TTL)
     spec = showcase.panels().get(sc_panel, {})
     with st.container(border=True, key=card_key("hot" if sc_run and sc_run.status == "ready" else "card", "scstatus")):
         c = st.columns([5, 1.3])
@@ -425,10 +470,8 @@ sel_pillars = f[2].multiselect("Pillar", list(config.pillars()), placeholder="Al
                                format_func=lambda p: config.pillars()[p].get("label", p))
 bank = f[3].toggle("⭐ Bank", help="Show your evergreen bank (all days)")
 
-with db.session() as s:
-    q = select(db.Draft).where(db.Draft.kind.in_(["regular", "showcase"]))
-    q = q.where(db.Draft.status == "banked") if bank else q.where(db.Draft.slot_date == day.isoformat())
-    drafts = list(s.scalars(q).all())
+feed_data = _day("bank" if bank else day.isoformat(), bank)
+drafts = list(feed_data["drafts"])
 if not bank and sel_status:
     drafts = [x for x in drafts if x.status in sel_status]
 if sel_slots:
@@ -455,4 +498,4 @@ for d in drafts:
         if showcase.is_showcase(d.slot, day):
             note += f" · showcase: {showcase.title(showcase.panel_for(day))}"
         section(slot_label(d.slot), note)
-    render_draft(d)
+    render_draft(d, feed_data)

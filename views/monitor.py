@@ -5,14 +5,15 @@ the numbers and a source under every item; write next to it, or move it to the W
 """
 from __future__ import annotations
 
-import time
 from datetime import timedelta
 from urllib.parse import urlparse
 
 import streamlit as st
 from sqlalchemy import select
 
-from panel.common import PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, hero, is_owner, pillar_badge
+from panel import cache
+from panel.common import (PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, hero, is_owner, last_monitor_run,
+                          pillar_badge)
 from xcp import config, db, gh, ideas, showcase, xtext
 from xcp.agents import monitor
 from xcp.timeutil import fmt_ago, fmt_ny, now_ny, parse_iso, today_ny, utcnow
@@ -29,28 +30,47 @@ WRITER_KV = "monitor:writer"
 owner = is_owner()
 
 
-# ------------------------------------------------------------------ data (memoized per browser session for a minute)
-
-def _memo(key, fn, ttl: float = 55):
-    memo = st.session_state.setdefault("_mon_memo", {})
-    hit = memo.get(key)
-    if hit and time.monotonic() - hit[0] < ttl:
-        return hit[1]
-    val = fn()
-    memo[key] = (time.monotonic(), val)
-    return val
-
+# ------------------------------------------------------------------ data (shared cache: clicks never wait on Neon)
 
 def _stream(hours: int, **kw) -> list[dict]:
-    return _memo(("stream", hours, tuple(sorted(kw.items()))), lambda: monitor.stream(hours=hours, **kw))
+    return cache.get(("stream", hours, tuple(sorted(kw.items()))), lambda: monitor.stream(hours=hours, **kw), ttl=60)
 
 
 def _briefs() -> list[dict]:
-    return _memo("briefs", ideas.load_briefs)
+    return cache.get("briefs", ideas.load_briefs, ttl=60)
+
+
+def _saved_briefs() -> list[dict]:
+    return cache.get("briefs_saved", lambda: [b for b in ideas.load_briefs(since_hours=24 * 30)
+                                              if b["status"] == "saved"], ttl=120)
 
 
 def _bust() -> None:
-    st.session_state.pop("_mon_memo", None)
+    """After Check now / Refresh: the next read comes straight from the database."""
+    cache.bust("stream", "briefs", "briefs_saved", "monitor_last_run")
+
+
+def _mark_story(key: str, status: str) -> None:
+    def f(stories: list[dict]) -> None:
+        for c in stories:
+            if c["key"] == key:
+                c["status"] = status
+    cache.update("stream", f)
+
+
+def _mark(idea: dict, status: str, brief_status: str | None = None) -> None:
+    """Reflect your own Save / Pass / write in every cached copy right away (no reload)."""
+    if idea["kind"] == "brief":
+        bs = brief_status or {"hidden": "dismissed", "": "new"}.get(status, status)
+
+        def f(briefs: list[dict]) -> None:
+            for b in briefs:
+                if b["key"] == idea["key"]:
+                    b["status"] = bs
+        cache.update("briefs", f)
+        cache.bust("briefs_saved")
+    elif idea.get("story_key"):
+        _mark_story(idea["story_key"], status)
 
 
 def _writer() -> dict:
@@ -93,7 +113,7 @@ def _set_status(idea: dict, status: str) -> None:
         monitor.set_status(idea["story_key"], status)
     if status == "hidden" and st.session_state.get("mon_open") == idea["key"]:
         st.session_state["mon_open"] = None
-    _bust()
+    _mark(idea, status)
     st.toast({"saved": "Saved. Find it under ⭐ Saved.", "hidden": "Passed. It won't come back.",
               "": "Removed from Saved."}[status], icon="🗂")
 
@@ -138,7 +158,8 @@ def _save_to_feed(idea: dict, wk: str) -> None:
     if idea.get("story_key"):
         monitor.set_status(idea["story_key"], "used")
     _keep_text(wk, idea["key"])
-    _bust()
+    _mark(idea, "used", "used")
+    cache.bust("feed")
     st.toast("Saved to the Feed. Post it from there or straight from X.", icon="✍️")
 
 
@@ -300,9 +321,13 @@ def detail(idea: dict, where: str, occ: dict | None = None) -> None:
     safe = _safe(idea["key"])
     with st.container(key=f"detail_{where}_{safe}"):
         slot = f" · for {occ['label']} {occ['post_at'].strftime('%a %I:%M %p').replace(' 0', ' ')}" if occ else ""
-        st.markdown(f'<div class="xcp-tb xcp-dtb"><span class="xcp-tb-l">▣ IDEA.TXT — '
-                    f'{esc_html(LABEL.get(idea["pillar"], idea["pillar"]))}{esc_html(slot)}</span>'
-                    f'<span class="xcp-tb-r"><i>_</i><i>▢</i><i class="x">✕</i></span></div>', unsafe_allow_html=True)
+        with st.container(horizontal=True, vertical_alignment="center", gap=None, key=f"dtb_{where}_{safe}"):
+            st.markdown(f'<span class="xcp-tb-l">▣ IDEA.TXT — {esc_html(LABEL.get(idea["pillar"], idea["pillar"]))}'
+                        f'{esc_html(slot)}</span>', unsafe_allow_html=True)
+            st.button("▁", key=f"wmin_{where}_{safe}", on_click=_toggle, args=(idea["key"],), help="Minimize")
+            st.button("▢", key=f"wmax_{where}_{safe}", on_click=_pin, args=(idea,),
+                      help="Maximize: open it in the Writer tab")
+            st.button("✕", key=f"wx_{where}_{safe}", on_click=_toggle, args=(idea["key"],), help="Close")
         left, right = st.columns([1.55, 1], gap="large")
         with left:
             idea_body(idea)
@@ -372,7 +397,7 @@ def slot_header(o: dict, n: int, first_up: bool, now) -> None:
     else:
         right.append(badge(f"in {_hm(t - now)}", "tan"))
     if o.get("panel"):
-        status = ideas.showcase_status(o) or "waiting"
+        status = cache.get(("showcase_status", o["key"]), lambda: ideas.showcase_status(o), ttl=60) or "waiting"
         right.append(badge(f"🖼 {showcase.title(o['panel'])} · {status}",
                            "olive" if status in ("ready", "posted") else "ink"))
     lane = "BTC lane · digital credit, stablecoins, legislation, bitcoin, macro" if o["lane"] == "btc" else "AI lane"
@@ -418,12 +443,13 @@ def story_card(c: dict, where: str = "live") -> None:
                         _pin(idea)
                         st.rerun()
                     if st.button("⭐", key=f"sv_{where}_{c['key']}", help="Save for later"):
-                        monitor.set_status(c["key"], "" if c["status"] == "saved" else "saved")
-                        _bust()
+                        new = "" if c["status"] == "saved" else "saved"
+                        monitor.set_status(c["key"], new)
+                        _mark_story(c["key"], new)
                         st.rerun()
                     if st.button("🙈", key=f"hd_{where}_{c['key']}", help="Hide this story"):
                         monitor.set_status(c["key"], "hidden")
-                        _bust()
+                        _mark_story(c["key"], "hidden")
                         st.rerun()
 
 
@@ -445,7 +471,7 @@ if "_mon_goto" in st.session_state:
 st.session_state.setdefault("mon_view", VIEWS[0])
 
 now = now_ny()
-last = db.kv_get("monitor:last_run") or {}
+last = last_monitor_run()
 occs = ideas.occurrences(now)
 stories72 = _stream(72)
 groups = ideas.assign(stories72, _briefs(), occs, now)
@@ -607,7 +633,7 @@ elif view == VIEWS[3]:
 # ------------------------------------------------------------------ ⭐ saved
 else:
     saved = [ideas.from_story(c) for c in _stream(24 * 7, include_offtopic=True) if c["status"] == "saved"]
-    saved_b = [b for b in ideas.load_briefs(since_hours=24 * 30) if b["status"] == "saved"]
+    saved_b = [b for b in _saved_briefs() if b["status"] == "saved"]
     items = saved_b + sorted(saved, key=lambda x: x["newest"], reverse=True)
     if not items:
         st.info("Nothing saved yet. Press ☆ Save on any idea.", icon="⭐")

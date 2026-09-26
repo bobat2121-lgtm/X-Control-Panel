@@ -157,6 +157,8 @@ def assign(stories: list[dict], briefs: list[dict], occs: list[dict], now: datet
     covered: set[str] = set()
     slots = config.settings().get("slots", {})
     for b in briefs:
+        if b["status"] == "dismissed":  # passed on since it was loaded
+            continue
         k = f"{b['run_date']}_{b['run_slot']}"
         if k not in out:  # a manual run on a day that slot doesn't post: the next slot in its lane takes it
             lane = slots.get(b["run_slot"], {}).get("lane") or config.pillar_lane(b["pillar"])

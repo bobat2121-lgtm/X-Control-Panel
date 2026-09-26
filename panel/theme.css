@@ -267,9 +267,12 @@ hr { border-color: var(--ink) !important; opacity: .25; }
 
 [data-testid="stButtonGroup"] > div { flex-wrap: wrap !important; row-gap: 4px; }
 
+/* No grey-out while the app reruns: the page stays solid and just updates (Streamlit fades after 0.5 s). */
+[data-stale="true"], .stale-element { opacity: 1 !important; transition: none !important; }
+
 /* Streamlit pulls every markdown block up by 1rem (to eat a paragraph's margin); plain HTML blocks have none. */
 [data-testid="stMarkdownContainer"]:has(> .xcp-poston, > .xcp-lbl, > .xcp-slot, > .xcp-news, > .xcp-idea-h, > .xcp-comp-h,
-  > .xcp-dtb, > .xcp-muted, > .xcp-chips) { margin-bottom: 0 !important; }
+  > .xcp-muted, > .xcp-chips) { margin-bottom: 0 !important; }
 .xcp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 1px 0 3px; }
 .xcp-chips .xcp-badge { margin: 0; }
 
@@ -338,7 +341,21 @@ hr { border-color: var(--ink) !important; opacity: .25; }
 /* ---------------------------------------------------------------- monitor: the opened idea (full width) */
 [class*="st-key-detail"] { background: var(--paper); border: 2px solid var(--ink); border-radius: 3px; box-shadow: 7px 7px 0 var(--ink);
   padding: 0 18px 18px !important; margin: 6px 0 14px; overflow: hidden; }
-.xcp-dtb { margin: 0 -18px 4px; }
+[class*="st-key-dtb_"] { margin: 0 -18px 4px; width: calc(100% + 36px) !important; min-height: 30px; gap: 3px !important;
+  padding: 0 6px 0 10px; background: linear-gradient(180deg, #4A473D 0%, #23211C 48%, #0B0B09 52%, #1B1A16 100%);
+  border-bottom: 1px solid #000; }
+[class*="st-key-dtb_"] > :first-child { flex: 1 1 auto !important; min-width: 0; }  /* title left, buttons right */
+[class*="st-key-dtb_"] [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
+[class*="st-key-dtb_"] p { margin: 0 !important; line-height: 1 !important; }
+[class*="st-key-dtb_"] .stButton button { width: 22px; min-width: 22px; height: 20px; min-height: 20px !important;
+  padding: 0 !important; border: 1px solid #000 !important; border-radius: 3px !important; background: var(--bevel) !important;
+  box-shadow: inset 1px 1px 0 #fff !important; }
+[class*="st-key-dtb_"] .stButton button p { font-family: var(--xp) !important; font-size: 11px !important; font-weight: 700;
+  line-height: 1 !important; }
+[class*="st-key-dtb_"] .stButton button:hover { border-color: var(--olive-hi) !important; box-shadow: inset 1px 1px 0 #fff,
+  0 0 0 2px var(--olive-glow) !important; }
+.stApp [class*="st-key-wx_"] button { background: linear-gradient(180deg, #B7C66A, #6B7A26) !important; }
+.stApp [class*="st-key-wx_"] button p { color: #fff !important; }
 .xcp-idea-h { font-family: var(--display); font-style: italic; font-weight: 900; font-size: clamp(1.7rem, 3vw, 2.35rem);
   line-height: .98; color: var(--ink); margin: 4px 0 6px; letter-spacing: -.005em; }
 .xcp-lbl { font-family: var(--crisp); font-weight: 700; font-size: 12px; letter-spacing: .14em; text-transform: uppercase;

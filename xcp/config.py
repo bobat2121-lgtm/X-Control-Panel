@@ -51,6 +51,7 @@ def deep_merge(base, override):
 
 OVERRIDE_TTL = 20.0  # seconds; a page render reads settings hundreds of times, the DB only needs asking once
 _overrides: dict[str, tuple[float, object]] = {}
+_merged: dict[str, tuple[object, object]] = {}  # name -> (the override it was built from, merged result)
 
 
 def _override(name: str):
@@ -68,19 +69,31 @@ def forget(key: str | None = None) -> None:
     """Drop cached DB overrides (all, or the one behind kv key 'config:<name>')."""
     if key is None:
         _overrides.clear()
+        _merged.clear()
     elif key.startswith("config:"):
         _overrides.pop(key.split(":", 1)[1], None)
+        _merged.pop(key.split(":", 1)[1], None)
+
+
+def view(name: str):
+    """The merged config, shared and read-only (never mutate it). Rebuilt only when the DB override changes."""
+    override = _override(name)
+    hit = _merged.get(name)
+    if hit is not None and hit[0] is override:
+        return hit[1]
+    if name in TEXT_DOCS:
+        merged = override if isinstance(override, str) and override.strip() else _text_default(name)
+    elif name == "watchlist":  # lists replace wholesale
+        merged = copy.deepcopy(override if isinstance(override, dict) else _yaml(name))
+    else:
+        merged = deep_merge(_yaml(name), override) if isinstance(override, dict) else copy.deepcopy(_yaml(name))
+    _merged[name] = (override, merged)
+    return merged
 
 
 def get(name: str):
-    """settings | pillars | watchlist -> dict ; voice | guidelines -> str"""
-    override = copy.deepcopy(_override(name))
-    if name in TEXT_DOCS:
-        return override if isinstance(override, str) and override.strip() else _text_default(name)
-    default = _yaml(name)
-    if name == "watchlist":  # lists replace wholesale
-        return override if isinstance(override, dict) else default
-    return deep_merge(default, override) if isinstance(override, dict) else copy.deepcopy(default)
+    """settings | pillars | watchlist -> dict ; voice | guidelines -> str. A private copy, safe to change."""
+    return copy.deepcopy(view(name))
 
 
 def save(name: str, value) -> None:
@@ -100,7 +113,8 @@ def settings() -> dict:
 
 
 def pillars() -> dict:
-    return get("pillars").get("pillars", {})
+    """Read-only (shared): copy it before changing anything."""
+    return view("pillars").get("pillars", {})
 
 
 def pillar_lane(pillar: str | None) -> str:

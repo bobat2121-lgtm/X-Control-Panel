@@ -13,9 +13,10 @@ from pathlib import Path
 
 import streamlit as st
 
+from panel import cache
 from xcp import config, db, gh
 from xcp.config import ROOT, env
-from xcp.timeutil import fmt_ago, fmt_ny, parse_iso, utcnow
+from xcp.timeutil import fmt_ny, parse_iso, utcnow
 
 # Every pillar badge uses the same palette; a glyph tells them apart (olive stays reserved for emphasis).
 PILLAR_GLYPHS = {"digital_credit": "◆", "bitcoin": "₿", "macro": "◷", "stablecoins": "＄", "legislation": "§",
@@ -23,6 +24,7 @@ PILLAR_GLYPHS = {"digital_credit": "◆", "bitcoin": "₿", "macro": "◷", "sta
 STATUS_ICONS = {"new": "🆕", "edited": "✏️", "posted": "✅", "dismissed": "🗑", "banked": "⭐", "snoozed": "⏰"}
 TONES = ("ink", "tan", "paper", "olive", "hot", "new")
 CSS_PATH = Path(__file__).with_name("theme.css")
+_CSS: dict[str, object] = {}  # theme.css, re-read only when the file changes
 
 
 def boot() -> None:
@@ -34,7 +36,14 @@ def boot() -> None:
     except Exception:  # no secrets.toml locally is fine
         pass
     db.engine()
-    st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+    mtime = CSS_PATH.stat().st_mtime
+    if _CSS.get("mtime") != mtime:
+        _CSS.update(mtime=mtime, html=f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>")
+    st.markdown(_CSS["html"], unsafe_allow_html=True)
+
+
+def last_monitor_run() -> dict:
+    return cache.get("monitor_last_run", lambda: db.kv_get("monitor:last_run") or {}, ttl=30)
 
 
 def is_owner() -> bool:
@@ -132,21 +141,26 @@ TAPE_SECONDS = 55  # one lap of the price tape
 FRESH_MINUTES = {"Prices": 10, "News": 30}  # older than this and the tray dot goes hollow
 
 
-@st.cache_data(ttl=120, show_spinner=False)
 def _live_quotes() -> dict:
-    """Shared by every viewer: at most one quote fetch every two minutes."""
+    """Shared by every viewer; refreshed in the background every two minutes."""
     from xcp.sources import market
 
-    try:
-        return market.quotes()
-    except Exception:  # the tape falls back to the last saved snapshot
-        return {}
+    def fetch() -> dict:
+        try:
+            return market.quotes()
+        except Exception:  # the tape falls back to the last saved snapshot
+            return {}
+
+    return cache.get("quotes", fetch, ttl=120)
+
+
+def _snapshot_data() -> dict:
+    return cache.get("snapshot", lambda: (lambda s: s.data if s else {})(db.latest_snapshot()), ttl=300)
 
 
 def tape_data() -> dict:
     """The last saved snapshot, overlaid with live quotes when they came back."""
-    snap = db.latest_snapshot()
-    base = snap.data if snap else {}
+    base = _snapshot_data()
     live = _live_quotes()
     b_btc, l_btc = base.get("btc") or {}, live.get("btc") or {}
     btc = l_btc if l_btc.get("price") else b_btc
@@ -182,12 +196,13 @@ def keep_news_fresh(news_at) -> bool:
     now = utcnow()
     if news_at and now - news_at < timedelta(minutes=NEWS_STALE_MINUTES):
         return False
-    kicked = parse_iso(db.kv_get("monitor:kick"))
+    kicked = parse_iso(cache.get("monitor_kick", lambda: db.kv_get("monitor:kick"), ttl=60))
     if kicked and now - kicked < timedelta(minutes=KICK_EVERY_MINUTES):
         return True
     if not gh.can_dispatch():
         return False
     db.kv_set("monitor:kick", now.isoformat())
+    cache.bust("monitor_kick", "monitor_last_run")
     return gh.dispatch("monitor.yml")[0]
 
 
@@ -199,7 +214,7 @@ def _fresh(label: str, at, updating: bool = False) -> str:
         return f'<span class="xcp-fresh stale" title="{label}: no update on record"><i></i><b>{label}</b>—</span>'
     mins = (utcnow() - at).total_seconds() / 60
     cls = "ok" if mins <= FRESH_MINUTES[label] else "stale"
-    return (f'<span class="xcp-fresh {cls}" title="{label} updated {fmt_ny(at)} ET ({fmt_ago(at)})"><i></i><b>{label}</b>'
+    return (f'<span class="xcp-fresh {cls}" title="{label} updated {fmt_ny(at)} ET"><i></i><b>{label}</b>'
             f'{fmt_ny(at, "%I:%M %p").lstrip("0")}</span>')
 
 
@@ -227,9 +242,12 @@ def market_strip() -> None:
     if not ticks:
         st.caption("No market data yet. It updates with every agent run, or use ↻.")
         return
-    news_at = parse_iso((db.kv_get("monitor:last_run") or {}).get("at"))
+    news_at = parse_iso(last_monitor_run().get("at"))
     updating = keep_news_fresh(news_at)
-    delay = -(time.time() % TAPE_SECONDS)  # keeps the tape's position steady across reruns
+    # The HTML only changes when the data does, so a click doesn't restart the scroll. When new prices arrive,
+    # the delay picks up where the clock says the tape should be.
+    stamp = d["as_of"].timestamp() if d["as_of"] else 0
+    delay = -(stamp % TAPE_SECONDS)
     html = (f'<div class="xcp-tape"><div class="xcp-ticker" title="Prices scroll; hover to pause">'
             f'<div class="xcp-ticks" style="animation-duration:{TAPE_SECONDS}s;animation-delay:{delay:.1f}s">'
             f'{"".join(ticks) * 2}</div></div><div class="xcp-tray">{_fresh("Prices", d["as_of"])}'
@@ -241,8 +259,8 @@ def market_strip() -> None:
         from xcp.sources import market
 
         with st.spinner("Refreshing market data…"):
-            _live_quotes.clear()
             market.take_snapshot()
+            cache.bust("quotes", "snapshot")
         st.rerun()
 
 
@@ -269,5 +287,6 @@ def enqueue(kind: str, payload: dict, kick: bool = True) -> None:
     with db.session() as s:
         s.add(db.Request(kind=kind, payload=payload))
         s.commit()
+    cache.bust("feed")
     msg = dispatch_agent() if kick else "Queued."
     st.toast(msg, icon="🛰️")

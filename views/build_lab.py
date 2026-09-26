@@ -4,6 +4,7 @@ from __future__ import annotations
 import streamlit as st
 from sqlalchemy import select
 
+from panel import cache
 from panel.common import badge, card_key, enqueue, esc_md, hero, is_owner, pillar_badge, section
 from xcp import config, db, showcase, xtext
 from xcp.timeutil import fmt_ago, today_ny, utcnow
@@ -155,7 +156,7 @@ section("Showcase lineup", "your Digital Credit Report panels")
 st.caption("Mon, Wed and Fri post the panels from digital-credit-report.streamlit.app once the showcase watcher has "
            "audited them (Control Room → Showcase). Build Lab ideas go out in regular slots, or upgrade those panels.")
 RUN_ICONS = {"waiting": "⏳", "blocked": "⚠️", "ready": "🟢", "posted": "✅", "missed": "🔴"}
-for row in showcase.lineup(14):
+for row in cache.get("lineup", lambda: showcase.lineup(14), ttl=300):  # six showcase-run lookups
     run = row["run"]
     c = st.columns([1.3, 2.2, 2.6, 1.6])
     c[0].markdown(f"**{row['date']:%a %b %d}**")
