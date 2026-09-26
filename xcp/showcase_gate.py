@@ -22,8 +22,9 @@ STALE_MATTERS = {"monday": {"strategy", "strive"}, "wednesday": {"strategy", "st
 # digital-exposure source checks that must be PASS (fresh) for each panel.
 FRESH_REQUIRED = {"monday": {"strategy", "strive"}, "wednesday": {"strategy", "strive", "yahoo.STRC", "yahoo.SATA"},
                   "friday": {"yahoo.BTC-USD", "yahoo.DX-Y.NYB", "onchain"}}
-# digital-exposure WARN checks that mean a blank tile on the X image (not just a soft note).
-MUST_PASS_PREFIX = {"friday": ("turnover.",)}
+# digital-exposure checks that mean "this tile's data hasn't loaded" (a blank on the X image): wait and
+# retry, whether digital-exposure reports them as WARN (before Sep 26) or FAIL (its third audit round).
+DATA_NOT_LOADED = {"friday": ("turnover.", "inputs", "MSTR.price_nav", "ASST.price_nav")}
 MAX_RATIO = 4 / 3 + 0.002  # X shows up to 3:4 uncropped
 WIDTH = 1440
 
@@ -131,16 +132,17 @@ def structural(v: Verdict, panel: str, audit: dict, checks: dict, png: bytes | N
     values = values_of(audit, panel)
 
     rows = [c for c in checks["checks"] if c.get("panel") in (panel, "sources")]
-    fails = [c for c in rows if c.get("status") == "FAIL"]
-    must = MUST_PASS_PREFIX.get(panel, ())
-    soft = [c for c in rows if c.get("status") == "WARN" and not str(c.get("id", "")).startswith(must)]
-    hard = [c for c in rows if c.get("status") == "WARN" and str(c.get("id", "")).startswith(must)]
+    loading = DATA_NOT_LOADED.get(panel, ())
+    not_loaded = [c for c in rows if c.get("status") in ("WARN", "FAIL") and str(c.get("id", "")).startswith(loading)]
+    fails = [c for c in rows if c.get("status") == "FAIL" and c not in not_loaded]
+    soft = [c for c in rows if c.get("status") == "WARN" and c not in not_loaded]
     n = checks.get("summary", {})
     v.add("audit", "FAIL" if fails else "PASS",
           "; ".join(f"{c.get('label') or c.get('id')}: {c.get('detail', '')}" for c in fails)[:600]
           or f"digital-exposure audit {n.get('PASS', 0)} PASS · {n.get('WARN', 0)} WARN · {n.get('FAIL', 0)} FAIL")
-    if hard:
-        v.add("audit_tiles", "WAIT", "missing on the image: " + ", ".join(c.get("label") or c["id"] for c in hard))
+    if not_loaded:
+        v.add("audit_tiles", "WAIT", "not loaded yet: " + "; ".join(
+            f"{c.get('label') or c['id']}" + (f" ({c['detail']})" if c.get("detail") else "") for c in not_loaded)[:600])
     for c in soft:
         v.add(f"audit_warn:{c.get('id')}", "WARN", f"{c.get('label')}: {c.get('detail', '')}"[:300])
 

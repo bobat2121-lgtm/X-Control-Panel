@@ -191,6 +191,24 @@ class FridayGate(unittest.TestCase):
         self.assertIn("MSTR price / NAV", next(c.detail for c in v.checks if c.id == "no_blanks"))
         self.assertEqual(s["audit_tiles"], "WAIT")  # the four missing turnover tiles
 
+    def test_digital_exposures_new_blank_tile_fails_mean_wait_not_alarm(self):
+        """After its Sep 26 audit round, digital-exposure FAILs these; they are data not loaded yet, so retry."""
+        c = copy.deepcopy(RUNNER_CHECKS)
+        for row in c["checks"]:
+            if row["id"].startswith("turnover."):
+                row["status"] = "FAIL"
+        c["checks"] += [
+            {"panel": "friday", "id": "inputs", "label": "Monday balance inputs loaded for Friday", "status": "FAIL",
+             "detail": "could not be validated · OSError: quote host down"},
+            {"panel": "friday", "id": "MSTR.price_nav", "label": "MSTR price / NAV drawn on the image", "status": "FAIL",
+             "detail": "blank tile"}]
+        v = gate.evaluate("friday", audit=RUNNER_AUDIT, checks=c, png=png(1440, 1920), now=at(2026, 9, 25, 20, 7))
+        s = statuses(v)
+        self.assertEqual(s["audit"], "PASS")
+        self.assertEqual(s["audit_tiles"], "WAIT")
+        self.assertFalse(v.failed)
+        self.assertIn("OSError: quote host down", next(x.detail for x in v.checks if x.id == "audit_tiles"))
+
 
 class WednesdayGate(unittest.TestCase):
     def test_ready_when_the_ledger_has_the_latest_8k_week(self):
