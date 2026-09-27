@@ -1,11 +1,11 @@
 [theme]
 base = "light"
-primaryColor = "#6B7A26"
-backgroundColor = "#F7F2E7"
-secondaryBackgroundColor = "#EEE5D1"
-textColor = "#0E0E0C"
-borderColor = "#0E0E0C"
-linkColor = "#0E0E0C"
+primaryColor = "#B5432A"
+backgroundColor = "#F8ECD2"
+secondaryBackgroundColor = "#F6E6C4"
+textColor = "#1A1410"
+borderColor = "#3B2418"
+linkColor = "#1A1410"
 baseRadius = "0.15rem"
 
 [server]

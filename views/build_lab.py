@@ -5,9 +5,11 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel import cache
-from panel.common import badge, card_key, enqueue, esc_md, hero, is_owner, pillar_badge, section
+from panel.common import page, badge, card_key, enqueue, esc_md, hero, is_owner, pillar_badge, section
 from xcp import config, db, showcase, xtext
 from xcp.timeutil import fmt_ago, today_ny, utcnow
+
+page("BUILDLAB")  # this page's tab title and pixel icon (bookmarks pick them up)
 
 STATUSES = ["inbox", "shortlist", "building", "ready", "shipped", "archived"]
 STATUS_LABELS = {"inbox": "💡 Inbox", "shortlist": "⭐ Shortlist", "building": "🔨 Building", "ready": "✅ Ready",

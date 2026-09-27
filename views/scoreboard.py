@@ -9,11 +9,13 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel import cache
-from panel.common import esc_md, hero, is_owner, section
+from panel.common import page, esc_md, hero, is_owner, section
 from xcp import config, db
 from xcp.agents import analyst
 from xcp.agents.collect import classify
 from xcp.timeutil import NY, aware, utcnow
+
+page("SCOREBOARD")  # this page's tab title and pixel icon (bookmarks pick them up)
 
 TARGET_LABELS = {"digital_credit": "Digital credit", "bitcoin": "Bitcoin", "macro": "Macro", "ai": "AI"}
 PALETTE = ["#0E0E0C", "#CDB891", "#8C8572", "#6B7A26"]  # ink, tan, mute, olive (the accent series)

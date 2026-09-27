@@ -1,6 +1,7 @@
 """Shared panel helpers: boot, market strip, badges, queueing agent work."""
 from __future__ import annotations
 
+import base64
 import hmac
 import html
 import os
@@ -18,17 +19,45 @@ from xcp import config, db, gh
 from xcp.config import ROOT, env
 from xcp.timeutil import fmt_ny, parse_iso, utcnow
 
-# Every pillar badge uses the same palette; a glyph tells them apart (olive stays reserved for emphasis).
+# Every pillar badge uses the same palette; a glyph tells them apart (vermilion stays reserved for emphasis).
 PILLAR_GLYPHS = {"digital_credit": "◆", "bitcoin": "₿", "macro": "◷", "stablecoins": "＄", "legislation": "§",
                  "ai_models": "◈", "ai_benchmarks": "▤", "ai_payments": "⇄", "physical_ai": "⚙"}
 STATUS_ICONS = {"new": "🆕", "edited": "✏️", "posted": "✅", "dismissed": "🗑", "banked": "⭐", "snoozed": "⏰"}
 TONES = ("ink", "tan", "paper", "olive", "hot", "new")
 CSS_PATH = Path(__file__).with_name("theme.css")
-_CSS: dict[str, object] = {}  # theme.css, re-read only when the file changes
+SCENE_PATH = Path(__file__).with_name("scene.js")
+ICON_DIR = Path(__file__).with_name("icons")
+_FILES: dict[str, tuple] = {}  # theme.css / scene.js / icons, re-read only when a file changes
+
+# page -> (name in the title bar, kanji, pixel icon): 物見 lookout · 巻物 scroll · 鍛冶場 smithy · 算盤 abacus · 本陣 HQ
+PAGES = {"MONITOR": ("Monitor", "物見", "monitor"), "FEED": ("Feed", "巻物", "feed"),
+         "BUILDLAB": ("Build Lab", "鍛冶場", "build_lab"), "SCOREBOARD": ("Scoreboard", "算盤", "scoreboard"),
+         "CONTROLROOM": ("Control Room", "本陣", "control_room")}
+
+
+def _cached(path: Path, render) -> str:
+    mtime = path.stat().st_mtime
+    hit = _FILES.get(str(path))
+    if not hit or hit[0] != mtime:
+        hit = (mtime, render(path))
+        _FILES[str(path)] = hit
+    return hit[1]
+
+
+def icon_uri(name: str) -> str:
+    """A pixel icon as a data URI (for title bars)."""
+    path = ICON_DIR / f"{name}-32.png"
+    return _cached(path, lambda p: "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode())
+
+
+def page(key: str) -> None:
+    """Per-page browser tab title and pixel icon (what a bookmark picks up)."""
+    name, kanji, icon = PAGES[key]
+    st.set_page_config(page_title=f"{name} · {kanji} · X Control Panel", page_icon=str(ICON_DIR / f"{icon}.png"))
 
 
 def boot() -> None:
-    """Copy Streamlit secrets into env (cloud) and make sure the DB exists."""
+    """Copy Streamlit secrets into env (cloud), make sure the DB exists, style the page and raise the world."""
     try:
         for k, v in st.secrets.items():
             if isinstance(v, (str, int, float, bool)) and not os.environ.get(k):
@@ -36,10 +65,12 @@ def boot() -> None:
     except Exception:  # no secrets.toml locally is fine
         pass
     db.engine()
-    mtime = CSS_PATH.stat().st_mtime
-    if _CSS.get("mtime") != mtime:
-        _CSS.update(mtime=mtime, html=f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>")
-    st.markdown(_CSS["html"], unsafe_allow_html=True)
+    st.markdown(_cached(CSS_PATH, lambda p: f"<style>{p.read_text(encoding='utf-8')}</style>"), unsafe_allow_html=True)
+    # The world (panel/scene.js, our own file) runs in the page itself: it draws once per tab behind the panel and
+    # keeps running across reruns and page switches.
+    with st.container(key="xcp_world_host"):
+        st.html(_cached(SCENE_PATH, lambda p: f"<script>{p.read_text(encoding='utf-8')}</script>"),
+                unsafe_allow_javascript=True)
 
 
 def last_monitor_run() -> dict:
@@ -89,7 +120,7 @@ def esc_html(text) -> str:
 
 
 def badge(text: str, tone: str = "ink") -> str:
-    """tone: ink | tan | paper | olive | hot (olive, pulsing) | new (blinking)."""
+    """tone: ink | tan | paper | olive (jade: good / on) | hot (vermilion, glowing) | new (blinking)."""
     return f'<span class="xcp-badge xcp-b-{tone if tone in TONES else "ink"}">{esc_html(text)}</span>'
 
 
@@ -101,19 +132,23 @@ def pillar_badge(pillar: str) -> str:
 
 def hero(app: str, headline: str, sub: str = "", stats: list[tuple] | None = None, kicker: str = "",
          icon: str = "▣") -> None:
-    """Page banner: XP title bar, big headline (wrap words in <em> for olive), stat tiles.
+    """Page banner: a lacquered title bar, then a window onto the world (the scene draws the part of the world
+    behind it) with the headline plate and stat tiles standing in front.
 
-    stats: (value, label) or (value, label, hot). headline may contain <em>; everything else is escaped.
+    stats: (value, label) or (value, label, hot). headline may contain <em> (lantern gold); everything else is escaped.
     (The only thing that scrolls in the app is the price tape above.)"""
     who = handle()
+    key = app.replace(".EXE", "").replace(" ", "").upper()
+    name, kanji, ico = PAGES.get(key, (app.title(), "", "app"))
     tiles = "".join(f'<div class="xcp-stat{" hot" if len(x) > 2 and x[2] else ""}"><div class="v">{esc_html(x[0])}</div>'
                     f'<div class="l">{esc_html(x[1])}</div></div>' for x in (stats or []))
     safe_headline = esc_html(headline).replace("&lt;em&gt;", "<em>").replace("&lt;/em&gt;", "</em>")
     st.markdown(
-        f'<section class="xcp-hero"><div class="xcp-tb"><span class="xcp-tb-l">{esc_html(icon)} {esc_html(app)}'
-        f'{" — @" + esc_html(who) if who else ""}</span><span class="xcp-tb-r"><i>_</i><i>▢</i><i class="x">✕</i></span></div>'
-        f'<div class="xcp-hero-in"><div><div class="xcp-kicker"><span class="dot">●</span> {esc_html(kicker)}'
-        f'<span class="caret"></span></div><h1 class="xcp-h1">{safe_headline}</h1>'
+        f'<section class="xcp-hero"><div class="xcp-tb"><span class="xcp-tb-l"><img class="xcp-tb-ico" alt="" '
+        f'src="{icon_uri(ico)}">{esc_html(name.upper())} · <span class="jp">{esc_html(kanji)}</span>'
+        f'{" — @" + esc_html(who) if who else ""}</span><span class="xcp-tb-r xcp-clock"></span></div>'
+        f'<div class="xcp-hero-in xcp-stage"><div class="xcp-plate"><div class="xcp-kicker"><span class="dot">●</span> '
+        f'{esc_html(kicker)}<span class="caret"></span></div><h1 class="xcp-h1">{safe_headline}</h1>'
         f'<p class="xcp-sub">{esc_html(sub)}</p></div><div class="xcp-stats">{tiles}</div></div></section>',
         unsafe_allow_html=True)
 

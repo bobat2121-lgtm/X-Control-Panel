@@ -12,11 +12,13 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel import cache
-from panel.common import (PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, hero, is_owner, last_monitor_run,
+from panel.common import (page, PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, hero, is_owner, last_monitor_run,
                           pillar_badge)
 from xcp import config, db, gh, ideas, showcase, xtext
 from xcp.agents import monitor
 from xcp.timeutil import aware, fmt_ago, fmt_ny, now_ny, parse_iso, today_ny, utcnow
+
+page("MONITOR")  # this page's tab title and pixel icon (bookmarks pick them up)
 
 PILLARS = config.pillars()
 LABEL = {k: v.get("label", k) for k, v in PILLARS.items()}
@@ -364,8 +366,8 @@ def detail(idea: dict, where: str, occ: dict | None = None) -> None:
     with st.container(key=f"detail_{where}_{safe}"):
         slot = f" · for {occ['label']} {occ['post_at'].strftime('%a %I:%M %p').replace(' 0', ' ')}" if occ else ""
         with st.container(horizontal=True, vertical_alignment="center", gap=None, key=f"dtb_{where}_{safe}"):
-            st.markdown(f'<span class="xcp-tb-l">▣ IDEA.TXT — {esc_html(LABEL.get(idea["pillar"], idea["pillar"]))}'
-                        f'{esc_html(slot)}</span>', unsafe_allow_html=True)
+            st.markdown(f'<span class="xcp-tb-l">IDEA · <span class="jp">案</span> — '
+                        f'{esc_html(LABEL.get(idea["pillar"], idea["pillar"]))}{esc_html(slot)}</span>', unsafe_allow_html=True)
             st.button("", icon=":material/minimize:", key=f"wmin_{where}_{safe}", on_click=_toggle,
                       args=(idea["key"],), help="Minimize")
             st.button("", icon=":material/crop_square:", key=f"wmax_{where}_{safe}", on_click=_pin, args=(idea,),

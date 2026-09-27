@@ -7,12 +7,14 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel import cache
-from panel.common import (STATUS_ICONS, badge, card_key, enqueue, esc_html, esc_md, handle, hero, is_owner, pillar_badge,
-                          section)
+from panel.common import (STATUS_ICONS, badge, card_key, enqueue, esc_html, esc_md, handle, hero, is_owner, page,
+                          pillar_badge, section)
 from xcp import charts, config, db, gh, showcase, xtext
 from xcp.agents import analyst
 from xcp.sources import digital_exposure as de
 from xcp.timeutil import at_ny, days_match, fmt_ago, fmt_ny, now_ny, today_ny, utcnow
+
+page("FEED")  # this page's tab title and pixel icon (bookmarks pick them up)
 
 settings = config.settings()
 SLOTS = settings["slots"]

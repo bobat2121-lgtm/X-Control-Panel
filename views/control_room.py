@@ -8,13 +8,15 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel import cache
-from panel.common import badge, enqueue, hero, is_owner, last_monitor_run, section
+from panel.common import page, badge, enqueue, hero, is_owner, last_monitor_run, section
 from xcp import config, db, gh, notify, showcase
 from xcp import voice as voice_mod
 from xcp.agents.collect import x_reads_this_month, x_reads_today
 from xcp.config import env
 from xcp.sources import calendar_feeds, issuers
 from xcp.timeutil import fmt_ago, fmt_ny, parse_iso, today_ny
+
+page("CONTROLROOM")  # this page's tab title and pixel icon (bookmarks pick them up)
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 CODEX_MODELS = {  # from OpenAI's Codex model list (Sept 2026)
