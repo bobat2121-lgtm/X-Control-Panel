@@ -1,7 +1,7 @@
 /* X Control Panel theme: a shogun's command post over the Chinese countryside.
    The world (panel/scene.js) runs behind everything: misty karst mountains, farms and villages, Japanese castles
-   floating overhead, one full day every five minutes. The panel sits on it as a parchment scroll in a lacquered
-   frame; page banners are windows onto the world.
+   floating overhead, one full day every five minutes. There is no panel: every block floats over the world as its
+   own island (paper cards and slabs in wooden frames, lacquer plaques for loose captions and labels).
    Palette (from the two reference pieces): lacquer ink, ochre tan, parchment, vermilion (accents), gold trim,
    stone, night indigo. Up = jade, down = vermilion.
    Type: Barlow Condensed heavy italic for headlines and numbers, Barlow Semi Condensed for crisp UI labels,
@@ -36,15 +36,9 @@ body { background: transparent !important; }   /* a body background would paint 
   background: transparent !important; }
 .stApp { color: var(--ink); }
 .stApp, .stApp p, .stApp li, .stApp label, .stApp input, .stApp textarea, .stApp button { font-family: var(--sans); }
-[data-testid="stMainBlockContainer"] {
-  max-width: 1180px; padding-top: 4.6rem; padding-bottom: 4rem; min-height: 100vh;
-  height: auto !important; flex: 0 0 auto !important;   /* grow with the content (Streamlit pins it to one screen) */
-  background-color: rgba(248, 236, 210, .96);
-  background-color: color-mix(in srgb, rgba(248, 236, 210, .96), rgba(96, 74, 98, .96) calc(var(--world-night, 0) * 22%));
-  background-image: radial-gradient(rgba(107, 74, 58, .09) 1px, transparent 1.3px);
-  background-size: 14px 14px;
-  border-left: 3px solid var(--wood-d); border-right: 3px solid var(--wood-d);
-  box-shadow: inset 3px 0 0 var(--gold), inset -3px 0 0 var(--gold), 0 0 0 1px #000, 0 0 48px rgba(0, 0, 0, .45);
+[data-testid="stMainBlockContainer"] {   /* no panel: the page floats over the world */
+  max-width: 1180px; padding-top: 4.6rem; padding-bottom: 5rem; min-height: 100vh;
+  height: auto !important; flex: 0 0 auto !important; background: none !important;
 }
 .stApp h1, .stApp h2, .stApp h3, .stApp h4 { font-family: var(--display) !important; font-style: italic; font-weight: 800;
   letter-spacing: -.005em; color: var(--ink); }
@@ -210,14 +204,17 @@ hr { border-color: var(--wood-d) !important; opacity: .3; }
 .xcp-src { border-left: 3px solid var(--tan); padding: 4px 10px; margin: 4px 0; font-size: .85rem; background: var(--cream); }
 
 /* ---------------------------------------------------------------- section headers: a vermilion seal and a brushed rule */
-.xcp-sec { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 8px; }
+.xcp-sec { display: flex; align-items: center; gap: 10px; margin: 18px 0 8px; padding: 7px 14px 7px 10px; background: var(--lacquer);
+  border: 2px solid #000; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--gold), 4px 6px 0 rgba(0, 0, 0, .45); }
+.xcp-sec h3 { color: var(--paper) !important; text-shadow: 2px 2px 0 #000; }
+.xcp-sec .note { color: var(--tan) !important; }
 .xcp-sec .bar { width: 14px; height: 14px; background: var(--accent); box-shadow: 0 0 0 2px var(--paper), 0 0 0 3px var(--accent-lo), 2px 2px 0 3px var(--ink);
   align-self: center; }
 .xcp-sec h3 { margin: 0 !important; padding: 0 !important; font-size: 1.45rem !important; font-weight: 800; text-transform: uppercase;
   line-height: 1 !important; }
 .xcp-sec .note { font-family: var(--pixel); font-size: 10px; color: var(--mute); text-transform: uppercase; letter-spacing: .05em; }
-.xcp-sec::after { content: ""; flex: 1; height: 2px; background: repeating-linear-gradient(90deg, var(--wood-d) 0 5px, transparent 5px 8px);
-  align-self: center; opacity: .45; }
+.xcp-sec::after { content: ""; flex: 1; height: 2px; background: repeating-linear-gradient(90deg, var(--gold) 0 5px, transparent 5px 8px);
+  align-self: center; opacity: .55; }
 
 /* ---------------------------------------------------------------- price tape: a lacquered beam, prices scroll */
 .xcp-tape { display: flex; align-items: stretch; gap: 3px; padding: 3px; background: var(--lacquer); border: 1px solid #000;
@@ -247,8 +244,8 @@ hr { border-color: var(--wood-d) !important; opacity: .3; }
 .xcp-fresh.busy i { background: var(--lantern); animation: xcp-blink 1s steps(1) infinite; }
 
 /* ---------------------------------------------------------------- page banner: a window onto the world */
-.xcp-hero { margin: 10px 0 18px; border: 2px solid #000; border-radius: 4px 4px 3px 3px; background: var(--night);
-  box-shadow: inset 0 0 0 1px var(--gold), 6px 6px 0 var(--ink); overflow: hidden; }
+.xcp-hero { margin: 10px 0 18px; border: 2px solid #000; border-radius: 4px 4px 3px 3px; background: transparent;
+  box-shadow: inset 0 0 0 1px var(--gold), 5px 7px 0 rgba(0, 0, 0, .5); overflow: hidden; }
 .xcp-tb { display: flex; justify-content: space-between; align-items: center; height: 30px; padding: 0 6px 0 8px;
   background: var(--lacquer); border-bottom: 2px solid var(--accent); box-shadow: 0 1px 0 var(--gold); }
 .xcp-tb-l { display: inline-flex; align-items: center; gap: 7px; font-family: var(--jp); font-size: 13px; color: var(--tan2);
@@ -265,9 +262,8 @@ hr { border-color: var(--wood-d) !important; opacity: .3; }
 .xcp-clock::after { content: "昼 DAY"; }
 html[data-world-hour="twilight"] .xcp-clock::after { content: "夕 TWILIGHT"; color: var(--accent-hi); }
 html[data-world-hour="night"] .xcp-clock::after { content: "夜 NIGHT"; color: var(--lantern); }
-.xcp-stage { position: relative; overflow: hidden; background: linear-gradient(180deg, #2B2148, #503A66); }
-.xcp-stage > canvas.xcp-stage-cv { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated;
-  z-index: 0; pointer-events: none; }
+.xcp-stage { position: relative; overflow: hidden; background: transparent; }   /* the world shows straight through */
+.xcp-stage > canvas.xcp-stage-cv { display: none; }
 .xcp-stage > :not(canvas) { position: relative; z-index: 1; }
 .xcp-hero-in { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: end;
   padding: clamp(96px, 19vh, 200px) 20px 18px; }
@@ -306,8 +302,45 @@ html[data-world-hour="night"] .xcp-clock::after { content: "夜 NIGHT"; color: v
   .xcp-slot .t { font-size: 2rem; }
   [class*="st-key-composer"] { position: static; }
   [data-testid="stMainBlockContainer"] { padding-top: 3.8rem; border-left-width: 0; border-right-width: 0; }
-  #xcp-world-btn { width: 38px; height: 38px; font-size: 19px; left: 10px; bottom: 10px; }
+  #xcp-world-btn { width: 34px; height: 34px; font-size: 17px; left: 8px; bottom: 8px; opacity: .65; }
 }
+
+/* ---------------------------------------------------------------- floating islands: every block stands on its own */
+/* Islands (paper, wooden frame, a shadow cast on the world, a lantern glow at night): cards, tab panels, charts,
+   forms, progress meters and the isle_* containers some pages wrap their loose sections in. */
+[class*="st-key-isle"], [data-testid="stTabs"] [role="tabpanel"],
+:is([data-testid="stVegaLiteChart"], [data-testid="stArrowVegaLiteChart"], [data-testid="stProgress"],
+    [data-testid="stForm"]):not(:is([class*="st-key-card"], [class*="st-key-hot"], [class*="st-key-open"], [class*="st-key-detail"], [class*="st-key-composer"], .st-key-wr_scroll, [class*="st-key-isle"], [role="tabpanel"], [data-testid="stExpander"], [data-testid="stPopoverBody"], [data-testid="stDialog"], [data-testid="stForm"], [data-testid="stMetric"], .xcp-hero) *) {
+  background: rgba(255, 250, 240, .96) !important; border: 2px solid var(--wood-d) !important; border-radius: 3px;
+  padding: 12px 14px !important;
+  box-shadow: 4px 6px 0 rgba(0, 0, 0, .45), 0 0 calc(var(--world-night, 0) * 22px) rgba(247, 179, 59, .3); }
+[class*="st-key-isle"] { position: relative; padding-top: 20px !important; }
+[class*="st-key-isle"]::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 8px;
+  background: repeating-linear-gradient(90deg, #2A1F18 0 6px, #3B2C22 6px 7px); border-bottom: 2px solid var(--gold); }
+[data-testid="stTabs"] [role="tabpanel"] { border-top: none !important; border-radius: 0 0 3px 3px; margin-top: 0; }
+[data-testid="stTabs"] [role="tablist"] { border-bottom: 2px solid var(--wood-d) !important; }
+[data-testid="stDataFrame"]:not(:is([class*="st-key-card"], [class*="st-key-hot"], [class*="st-key-open"], [class*="st-key-detail"], [class*="st-key-composer"], .st-key-wr_scroll, [class*="st-key-isle"], [role="tabpanel"], [data-testid="stExpander"], [data-testid="stPopoverBody"], [data-testid="stDialog"], [data-testid="stForm"], [data-testid="stMetric"], .xcp-hero) *) { box-shadow: 4px 6px 0 rgba(0, 0, 0, .45); border: 2px solid var(--wood-d);
+  border-radius: 3px; }
+[class*="st-key-card"], [class*="st-key-hot"] { box-shadow: 4px 6px 0 rgba(0, 0, 0, .5),
+  0 0 calc(var(--world-night, 0) * 20px) rgba(247, 179, 59, .32) !important; }
+[class*="st-key-hot"] { box-shadow: 4px 6px 0 var(--accent-lo), 0 0 calc(6px + var(--world-night, 0) * 18px) rgba(247, 179, 59, .4) !important; }
+hr { border-color: var(--gold) !important; opacity: .7; box-shadow: 0 2px 0 rgba(0, 0, 0, .5); }
+
+/* Plaques: loose captions, field labels, toggles and radios that stand straight on the world */
+:is([data-testid="stCaptionContainer"], [data-testid="stWidgetLabel"], [data-testid="stCheckbox"], [data-testid="stRadio"],
+    .stCheckbox):not(:is([class*="st-key-card"], [class*="st-key-hot"], [class*="st-key-open"], [class*="st-key-detail"], [class*="st-key-composer"], .st-key-wr_scroll, [class*="st-key-isle"], [role="tabpanel"], [data-testid="stExpander"], [data-testid="stPopoverBody"], [data-testid="stDialog"], [data-testid="stForm"], [data-testid="stMetric"], .xcp-hero) *) {
+  width: fit-content !important; max-width: 100%; background: rgba(26, 20, 16, .92); border: 1px solid rgba(230, 180, 34, .5);
+  opacity: 1 !important;   /* Streamlit draws captions at 60% opacity, which would fade the plaque too */
+  padding: 3px 9px !important; border-radius: 2px; box-shadow: 2px 3px 0 rgba(0, 0, 0, .5); }
+:is([data-testid="stCaptionContainer"], [data-testid="stWidgetLabel"], [data-testid="stCheckbox"], [data-testid="stRadio"],
+    .stCheckbox):not(:is([class*="st-key-card"], [class*="st-key-hot"], [class*="st-key-open"], [class*="st-key-detail"], [class*="st-key-composer"], .st-key-wr_scroll, [class*="st-key-isle"], [role="tabpanel"], [data-testid="stExpander"], [data-testid="stPopoverBody"], [data-testid="stDialog"], [data-testid="stForm"], [data-testid="stMetric"], .xcp-hero) *) :is(p, span, label) { color: var(--tan2) !important; margin-bottom: 0 !important; }
+/* one plaque per toggle / radio: the label inside it doesn't get its own */
+:is([data-testid="stCheckbox"], [data-testid="stRadio"], .stCheckbox) [data-testid="stWidgetLabel"] {
+  background: none !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; width: auto !important; }
+/* ... and loose paragraphs get a small paper slab */
+.stMarkdown [data-testid="stMarkdownContainer"]:has(> p, > ul, > ol, > blockquote, > h1, > h2, > h3, > h4, > table):not(:is([class*="st-key-card"], [class*="st-key-hot"], [class*="st-key-open"], [class*="st-key-detail"], [class*="st-key-composer"], .st-key-wr_scroll, [class*="st-key-isle"], [role="tabpanel"], [data-testid="stExpander"], [data-testid="stPopoverBody"], [data-testid="stDialog"], [data-testid="stForm"], [data-testid="stMetric"], .xcp-hero) *) {
+  width: fit-content; max-width: 100%; background: rgba(255, 250, 240, .95); border: 1px solid var(--wood-d); border-radius: 2px;
+  padding: 5px 11px 3px; box-shadow: 3px 4px 0 rgba(0, 0, 0, .45); }
 
 /* No grey-out while the app reruns: the page stays solid and just updates (Streamlit fades after 0.5 s). */
 [data-stale="true"], .stale-element { opacity: 1 !important; transition: none !important; }
@@ -320,7 +353,8 @@ html[data-world-hour="night"] .xcp-clock::after { content: "夜 NIGHT"; color: v
 
 /* ---------------------------------------------------------------- monitor: view switcher (shoji tabs) */
 .st-key-mon_view { margin: 4px 0 6px; }
-.st-key-mon_view [data-testid="stButtonGroup"] { gap: 3px; border-bottom: 3px solid var(--wood-d); }
+.st-key-mon_view [data-testid="stButtonGroup"] { gap: 3px; }
+.st-key-mon_view [data-testid="stButtonGroup"] button { box-shadow: inset 0 1px 0 #fff, 3px 4px 0 rgba(0, 0, 0, .45) !important; }
 .st-key-mon_view [data-testid="stButtonGroup"] button { background: var(--bevel) !important; border-bottom: none !important;
   border-radius: 5px 5px 0 0 !important; box-shadow: inset 0 1px 0 #fff !important; min-height: 44px; }
 .st-key-mon_view [data-testid="stButtonGroup"] button p { font-size: 16px; letter-spacing: .05em; text-transform: uppercase; }

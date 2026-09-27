@@ -158,13 +158,14 @@ section("Showcase lineup", "your Digital Credit Report panels")
 st.caption("Mon, Wed and Fri post the panels from digital-credit-report.streamlit.app once the showcase watcher has "
            "audited them (Control Room → Showcase). Build Lab ideas go out in regular slots, or upgrade those panels.")
 RUN_ICONS = {"waiting": "⏳", "blocked": "⚠️", "ready": "🟢", "posted": "✅", "missed": "🔴"}
-for row in cache.get("lineup", lambda: showcase.lineup(14), ttl=300):  # six showcase-run lookups
-    run = row["run"]
-    c = st.columns([1.3, 2.2, 2.6, 1.6])
-    c[0].markdown(f"**{row['date']:%a %b %d}**")
-    c[1].markdown(f"🛠 {row['title']}")
-    c[2].markdown(f"{row['label']} · post {row['post']}")
-    c[3].markdown(f"{RUN_ICONS.get(run.status, '')} {run.status}" if run else "🗓 scheduled")
+with st.container(key="isle_lineup"):
+    for row in cache.get("lineup", lambda: showcase.lineup(14), ttl=300):  # six showcase-run lookups
+        run = row["run"]
+        c = st.columns([1.3, 2.2, 2.6, 1.6])
+        c[0].markdown(f"**{row['date']:%a %b %d}**")
+        c[1].markdown(f"🛠 {row['title']}")
+        c[2].markdown(f"{row['label']} · post {row['post']}")
+        c[3].markdown(f"{RUN_ICONS.get(run.status, '')} {run.status}" if run else "🗓 scheduled")
 
 # --- picks
 section("This week's picks", "highest pick score")
@@ -254,6 +255,7 @@ else:
 series = sorted({i.series for i in ideas if i.series})
 if series:
     section("Series")
-    for name in series:
-        members = [i for i in ideas if i.series == name]
-        st.markdown(f"**{esc_md(name)}**: " + ", ".join(f"{esc_md(i.title)} ({i.status})" for i in members))
+    with st.container(key="isle_series"):
+        for name in series:
+            members = [i for i in ideas if i.series == name]
+            st.markdown(f"**{esc_md(name)}**: " + ", ".join(f"{esc_md(i.title)} ({i.status})" for i in members))

@@ -771,6 +771,7 @@
     for (const st of stages) {
       let sc = st.querySelector(':scope > canvas.xcp-stage-cv');
       if (!sc) { sc = document.createElement('canvas'); sc.className = 'xcp-stage-cv'; sc.setAttribute('aria-hidden', 'true'); st.prepend(sc); }
+      if (sc.offsetParent === null) continue;          // hidden: the world already shows straight through
       const r = st.getBoundingClientRect();
       if (r.bottom < 0 || r.top > innerHeight || r.width < 2) continue;
       const sx = r.left / S, sy = r.top / S, sw = r.width / S, sh = r.height / S;

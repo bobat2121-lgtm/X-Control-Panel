@@ -103,7 +103,8 @@ if reasons:
 memo = cache.get(("score", "memo"), lambda: db.kv_get("weekly_memo"), ttl=300)
 if memo and memo.get("text"):
     section("Weekly memo", memo.get("date", ""))
-    st.markdown(esc_md(memo["text"]))
+    with st.container(key="isle_memo"):
+        st.markdown(esc_md(memo["text"]))
 
 if is_owner():
     with st.expander("➕ Log a post manually"):

@@ -373,63 +373,64 @@ hero("FEED.EXE", "Your posts, <em>ready to ship</em>.",
              and _mix["total"] >= 5)],
      kicker=f"{_today:%A %b %d} · {_mix['total']} posts in the last 7 days", icon="📰")
 
-top = st.columns([1.15, 1.5, 1.35], gap="large")
-with top[0]:
-    day = st.date_input("Day", value=today_ny(), format="MM/DD/YYYY")
-    day_drafts = _day(day.isoformat())["drafts"]
-    for key, spec in SLOTS.items():
-        if not days_match(spec.get("days"), day):
-            continue
-        posted = any(x.slot == key and x.status == "posted" for x in day_drafts)
-        extra = f" · 🛠 {showcase.title(showcase.panel_for(day))}" if showcase.is_showcase(key, day) else ""
-        extra += " · optional" if spec.get("optional") else ""
-        st.markdown(f"{'✅' if posted else '⬜'} **{spec['label']}** at {spec['post_at']}{extra}")
-
-with top[1]:
-    m = _mix
-    st.markdown(f"**Mix meter** · last 7 days · {m['total']} posts")
-    for group, target in m["targets"].items():
-        share = m["shares"].get(group, 0.0)
-        gap = share - target
-        icon = "■" if abs(gap) <= 7 or m["total"] < 5 else ("▲" if gap > 0 else "▼")
-        st.progress(min(share / 100, 1.0), text=f"{icon} {TARGET_LABELS.get(group, group)}: {share:.0f}% "
-                                                    f"(target {target}%)")
-
-with top[2]:
-    now = now_ny()
-    upcoming = []
-    for offset in range(0, 8):
-        dd = now.date() + timedelta(days=offset)
+with st.container(key="isle_feed_top"):  # floats over the world as one island
+    top = st.columns([1.15, 1.5, 1.35], gap="large")
+    with top[0]:
+        day = st.date_input("Day", value=today_ny(), format="MM/DD/YYYY")
+        day_drafts = _day(day.isoformat())["drafts"]
         for key, spec in SLOTS.items():
-            t = at_ny(dd, spec["post_at"])
-            if days_match(spec.get("days"), dd) and t > now:
-                upcoming.append((t, key))
+            if not days_match(spec.get("days"), day):
+                continue
+            posted = any(x.slot == key and x.status == "posted" for x in day_drafts)
+            extra = f" · 🛠 {showcase.title(showcase.panel_for(day))}" if showcase.is_showcase(key, day) else ""
+            extra += " · optional" if spec.get("optional") else ""
+            st.markdown(f"{'✅' if posted else '⬜'} **{spec['label']}** at {spec['post_at']}{extra}")
+
+    with top[1]:
+        m = _mix
+        st.markdown(f"**Mix meter** · last 7 days · {m['total']} posts")
+        for group, target in m["targets"].items():
+            share = m["shares"].get(group, 0.0)
+            gap = share - target
+            icon = "■" if abs(gap) <= 7 or m["total"] < 5 else ("▲" if gap > 0 else "▼")
+            st.progress(min(share / 100, 1.0), text=f"{icon} {TARGET_LABELS.get(group, group)}: {share:.0f}% "
+                                                        f"(target {target}%)")
+
+    with top[2]:
+        now = now_ny()
+        upcoming = []
+        for offset in range(0, 8):
+            dd = now.date() + timedelta(days=offset)
+            for key, spec in SLOTS.items():
+                t = at_ny(dd, spec["post_at"])
+                if days_match(spec.get("days"), dd) and t > now:
+                    upcoming.append((t, key))
+            if upcoming:
+                break
         if upcoming:
-            break
-    if upcoming:
-        t, key = min(upcoming)
-        mins = int((t - now).total_seconds() // 60)
-        sc = f" · 🛠 {showcase.title(showcase.panel_for(t.date()))}" if showcase.is_showcase(key, t.date()) else ""
-        st.metric("Next slot", f"{slot_label(key)} {t.strftime('%I:%M %p').lstrip('0')}",
-                  f"in {mins // 60}h {mins % 60}m{sc}", delta_color="off")
-    n_pending = len(_day(_today.isoformat())["pending"])
-    if n_pending:
-        st.caption(f"⏳ {n_pending} AI request(s) queued or running")
-    if is_owner():
-        with st.expander("✍️ Draft from a link or idea"):
-            src_in = st.text_input("X post URL, article link, or a raw idea", key="dfl_src")
-            angle = st.text_input("Your angle (optional)", key="dfl_angle")
-            if st.button("Create drafts", type="primary", key="dfl_go") and src_in.strip():
-                if src_in.strip().startswith("http"):
-                    enqueue("draft_from_url", {"url": src_in.strip(), "angle": angle})
-                else:
-                    enqueue("draft_from_text", {"text": src_in.strip(), "angle": angle})
-        with st.expander("✨ Spark post ideas from my style library"):
-            n_sp = st.slider("How many", 3, 10, 5, key="sp_n")
-            focus = st.text_input("Focus (optional)", key="sp_focus", placeholder="e.g. STRC daily dividends")
-            st.caption("Each idea uses a different format from your style library. Most are short, with at most one long.")
-            if st.button("Spark ideas", type="primary", key="sp_go"):
-                enqueue("style_sparks", {"n": n_sp, "focus": focus})
+            t, key = min(upcoming)
+            mins = int((t - now).total_seconds() // 60)
+            sc = f" · 🛠 {showcase.title(showcase.panel_for(t.date()))}" if showcase.is_showcase(key, t.date()) else ""
+            st.metric("Next slot", f"{slot_label(key)} {t.strftime('%I:%M %p').lstrip('0')}",
+                      f"in {mins // 60}h {mins % 60}m{sc}", delta_color="off")
+        n_pending = len(_day(_today.isoformat())["pending"])
+        if n_pending:
+            st.caption(f"⏳ {n_pending} AI request(s) queued or running")
+        if is_owner():
+            with st.expander("✍️ Draft from a link or idea"):
+                src_in = st.text_input("X post URL, article link, or a raw idea", key="dfl_src")
+                angle = st.text_input("Your angle (optional)", key="dfl_angle")
+                if st.button("Create drafts", type="primary", key="dfl_go") and src_in.strip():
+                    if src_in.strip().startswith("http"):
+                        enqueue("draft_from_url", {"url": src_in.strip(), "angle": angle})
+                    else:
+                        enqueue("draft_from_text", {"text": src_in.strip(), "angle": angle})
+            with st.expander("✨ Spark post ideas from my style library"):
+                n_sp = st.slider("How many", 3, 10, 5, key="sp_n")
+                focus = st.text_input("Focus (optional)", key="sp_focus", placeholder="e.g. STRC daily dividends")
+                st.caption("Each idea uses a different format from your style library. Most are short, with at most one long.")
+                if st.button("Spark ideas", type="primary", key="sp_go"):
+                    enqueue("style_sparks", {"n": n_sp, "focus": focus})
 
 def _recheck(panel: str) -> None:
     ok, why = gh.dispatch("showcase.yml", {"mode": "once", "panel": panel})
