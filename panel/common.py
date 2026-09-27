@@ -143,7 +143,7 @@ def _fmt_px(v, prefix="$", dec=2):
     return "—" if v is None else f"{prefix}{v:,.{dec}f}"
 
 
-TAPE_SECONDS = 55  # one lap of the price tape
+TAPE_SECONDS_PER_TICK = 5  # the tape's speed: one lap takes this long per price on it
 FRESH_MINUTES = {"Prices": 10, "News": 30}  # older than this and the tray dot goes hollow
 
 
@@ -172,16 +172,12 @@ def tape_data() -> dict:
     btc = l_btc if l_btc.get("price") else b_btc
     eq = {**(base.get("equities") or {}), **{k: v for k, v in (live.get("equities") or {}).items() if v.get("price")}}
     der = dict(base.get("derived") or {})
-    for t in ("MSTR", "ASST"):  # rescale mNAV: market cap moves with the stock, NAV with bitcoin
-        key, was, now = f"{t.lower()}_basic_mnav", (base.get("equities") or {}).get(t, {}), eq.get(t, {})
-        if der.get(key) and was.get("price") and now.get("price") and b_btc.get("price") and btc.get("price"):
-            der[key] = der[key] * (now["price"] / was["price"]) / (btc["price"] / b_btc["price"])
-    for t in ("STRC", "SATA"):
-        if eq.get(t, {}).get("price"):
-            der[f"{t.lower()}_vs_par"] = eq[t]["price"] - 100
+    mnav = {t: (live.get("mnav") or {}).get(t, {}).get("value") or der.get(f"{t.lower()}_mnav")
+            for t in ("MSTR", "ASST")}  # each issuer's own EV / bitcoin NAV, live when it came back
+    crypto = {k: v for k, v in (live.get("crypto") or {}).items() if v.get("price")}
     fg = live.get("fear_greed") or (base.get("sentiment") or {}).get("fear_greed") or {}
     fresh = l_btc.get("price") or live.get("equities")
-    return {"btc": btc, "equities": eq, "derived": der, "fear_greed": fg,
+    return {"btc": btc, "equities": eq, "crypto": crypto, "mnav": mnav, "derived": der, "fear_greed": fg,
             "as_of": parse_iso(live.get("as_of") if fresh else base.get("as_of")), "live": bool(fresh)}
 
 
@@ -227,17 +223,25 @@ def _fresh(label: str, at, updating: bool = False) -> str:
 def market_strip() -> None:
     """The price tape: an XP status bar whose prices scroll, with a tray clock saying how fresh prices and news are."""
     d = tape_data()
-    eq, der, btc = d["equities"], d["derived"], d["btc"]
+    eq, btc, crypto, mnav = d["equities"], d["btc"], d["crypto"], d["mnav"]
     ticks = [_tick("BTC", _fmt_px(btc.get("price"), dec=0), btc.get("chg_24h_pct"))] if btc.get("price") else []
-    for t in ("MSTR", "ASST", "STRC", "SATA"):
-        if eq.get(t, {}).get("price") is not None:
-            ticks.append(_tick(t, _fmt_px(eq[t]["price"]), eq[t].get("chg_pct")))
-    for t in ("STRC", "SATA"):
-        if der.get(f"{t.lower()}_vs_par") is not None:
-            ticks.append(_tick(f"{t} vs par", f"{der[f'{t.lower()}_vs_par']:+.2f}"))
-    for t in ("MSTR", "ASST"):
-        if der.get(f"{t.lower()}_basic_mnav"):
-            ticks.append(_tick(f"{t} mNAV", f"{der[f'{t.lower()}_basic_mnav']:.2f}x"))
+
+    def stock(sym: str, label: str | None = None, prefix: str = "$") -> None:
+        if eq.get(sym, {}).get("price") is not None:
+            ticks.append(_tick(label or sym, _fmt_px(eq[sym]["price"], prefix), eq[sym].get("chg_pct")))
+
+    for t, pref in (("MSTR", "STRC"), ("ASST", "SATA")):  # each treasury company: stock, mNAV, its preferred
+        stock(t)
+        if mnav.get(t):
+            ticks.append(_tick(f"{t} mNAV", f"{mnav[t]:.2f}x"))
+        stock(pref)
+    stock("BMNR")
+    for c in ("ETH", "ZEC"):
+        if crypto.get(c, {}).get("price"):
+            ticks.append(_tick(c, _fmt_px(crypto[c]["price"]), crypto[c].get("chg_24h_pct")))
+    for t in ("SPCX", "TSLA", "SPY", "QQQ"):
+        stock(t)
+    stock("^RUT", "RUT", prefix="")
     tnx, dxy = eq.get("^TNX", {}), eq.get("DX-Y.NYB", {})
     if tnx.get("price"):
         ticks.append(_tick("US10Y", f"{tnx['price']:.2f}%", tnx.get("chg_pct")))
@@ -252,10 +256,11 @@ def market_strip() -> None:
     updating = keep_news_fresh(news_at)
     # The HTML only changes when the data does, so a click doesn't restart the scroll. When new prices arrive,
     # the delay picks up where the clock says the tape should be.
+    lap = max(40, TAPE_SECONDS_PER_TICK * len(ticks))
     stamp = d["as_of"].timestamp() if d["as_of"] else 0
-    delay = -(stamp % TAPE_SECONDS)
+    delay = -(stamp % lap)
     html = (f'<div class="xcp-tape"><div class="xcp-ticker" title="Prices scroll; hover to pause">'
-            f'<div class="xcp-ticks" style="animation-duration:{TAPE_SECONDS}s;animation-delay:{delay:.1f}s">'
+            f'<div class="xcp-ticks" style="animation-duration:{lap}s;animation-delay:{delay:.1f}s">'
             f'{"".join(ticks) * 2}</div></div><div class="xcp-tray">{_fresh("Prices", d["as_of"])}'
             f'{_fresh("News", news_at, updating)}</div></div>')
     c = st.columns([16, 1], vertical_alignment="center") if is_owner() else [st.container()]

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import date
+from datetime import date, timedelta
 
 import httpx
 import pandas as pd
@@ -36,11 +36,12 @@ def _num(x):
 
 # ------------------------------------------------------------------ BTC
 
-def btc() -> dict:
-    stats = _get("https://api.exchange.coinbase.com/products/BTC-USD/stats") or {}
+def coinbase(product: str) -> dict:
+    """Last price and 24-hour move for a Coinbase pair (BTC-USD, ETH-USD, ZEC-USD)."""
+    stats = _get(f"https://api.exchange.coinbase.com/products/{product}/stats") or {}
     last, open_ = _num(stats.get("last")), _num(stats.get("open"))
     if last is None:
-        spot = _get("https://api.coinbase.com/v2/prices/BTC-USD/spot") or {}
+        spot = _get(f"https://api.coinbase.com/v2/prices/{product}/spot") or {}
         last = _num((spot.get("data") or {}).get("amount"))
     out = {"price": last, "source": "coinbase"}
     if last and open_:
@@ -48,6 +49,10 @@ def btc() -> dict:
         out["high_24h"] = _num(stats.get("high"))
         out["low_24h"] = _num(stats.get("low"))
     return out
+
+
+def btc() -> dict:
+    return coinbase("BTC-USD")
 
 
 def btc_candles(days: int = 7) -> pd.DataFrame:
@@ -169,22 +174,6 @@ def equities(tickers: list[str]) -> dict:
     return out
 
 
-def market_caps(tickers: list[str]) -> dict:
-    try:
-        import yfinance as yf
-    except ImportError:
-        return {}
-    out = {}
-    for t in tickers:
-        try:
-            mc = yf.Ticker(t).fast_info.get("marketCap")
-            if mc:
-                out[t] = float(mc)
-        except Exception as e:
-            log.info("market cap %s failed: %s", t, e)
-    return out
-
-
 def history(ticker: str, period: str = "3mo") -> pd.Series:
     try:
         import yfinance as yf
@@ -279,18 +268,86 @@ def _inputs(m: dict) -> tuple[dict, dict]:
     return m, provenance
 
 
-TAPE_TICKERS = ["MSTR", "ASST", "STRC", "SATA", "^TNX", "DX-Y.NYB"]
+TAPE_TICKERS = ["MSTR", "STRC", "ASST", "SATA", "BMNR", "SPCX", "TSLA", "SPY", "QQQ", "^RUT", "^TNX", "DX-Y.NYB"]
+TAPE_CRYPTO = ["ETH", "ZEC"]  # Coinbase, 24-hour moves like BTC
+
+# ------------------------------------------------------------------ mNAV, the way each issuer's own dashboard does it
+# Strategy (strategy.com): mNAV = enterprise value / bitcoin NAV, published live by its KPI feed.
+# Strive (strive.com/treasury, "ev_to_btc_nav"): EV = fully diluted shares x ASST + debt + SATA notional - cash
+#   - marketable securities; mNAV = EV / (BTC held x BTC price). Inputs come from Strive's dashboard feed.
+JSON_UA = {"User-Agent": "Mozilla/5.0 (compatible; XControlPanel/1.0)", "Accept": "application/json"}
+
+
+def strategy_mnav() -> dict:
+    try:
+        r = httpx.get("https://api.strategy.com/btc/bitcoinKpis", headers=JSON_UA, timeout=20)
+        r.raise_for_status()
+        k = r.json().get("results") or {}
+    except (httpx.HTTPError, ValueError) as e:
+        log.warning("strategy.com KPIs failed: %s", e)
+        return {}
+    v = _num(k.get("mNav"))
+    if not v:
+        return {}
+    ext = k.get("extendedSession") or {}
+    return {"value": v, "extended": _num(ext.get("mNav")), "extended_session": ext.get("sessionType"),
+            "method": "EV / bitcoin NAV (strategy.com)", "source": "strategy.com"}
+
+
+def strive_inputs() -> dict:
+    """The latest day on Strive's treasury dashboard: fully diluted shares, debt, cash, securities, SATA notional,
+    BTC held, and Strive's own mNAV for that day."""
+    to = today_ny()
+    try:
+        r = httpx.get("https://strive.com/treasury/api/dashboard/calculated", headers=JSON_UA, timeout=25,
+                      params={"fromDate": (to - timedelta(days=10)).isoformat(), "toDate": to.isoformat(),
+                              "currency": "USD", "stockSymbol": "ASST"})
+        r.raise_for_status()
+        rows = [x for x in ((r.json().get("data") or {}).get("btcHoldings") or []) if x.get("evMnav")]
+    except (httpx.HTTPError, ValueError) as e:
+        log.warning("strive.com dashboard failed: %s", e)
+        return {}
+    if not rows:
+        return {}
+    x = rows[-1]
+    return {"shares": _num(x.get("sharesOutstanding")), "debt": _num(x.get("debt")) or 0.0,
+            "cash": _num(x.get("cash")) or 0.0, "securities": _num(x.get("marketableSecurities")) or 0.0,
+            "preferred": _num(x.get("preferredStockMarketCap")) or 0.0, "btc": _num(x.get("btcHoldings")),
+            "mnav": _num(x.get("evMnav")), "date": x.get("date")}
+
+
+def strive_mnav(inputs: dict, asst_price: float | None, btc_price: float | None) -> dict:
+    """Strive's EV / bitcoin NAV at live prices (falls back to Strive's own number for the day)."""
+    if not inputs:
+        return {}
+    if inputs.get("shares") and inputs.get("btc") and asst_price and btc_price:
+        ev = (inputs["shares"] * asst_price + inputs["debt"] + inputs["preferred"] - inputs["cash"]
+              - inputs["securities"])
+        value = ev / (inputs["btc"] * btc_price)
+    elif inputs.get("mnav"):
+        value = inputs["mnav"]
+    else:
+        return {}
+    return {"value": value, "method": "EV / bitcoin NAV (strive.com)", "source": "strive.com",
+            "inputs_as_of": inputs.get("date")}
 
 
 def quotes(tickers: list[str] | None = None) -> dict:
-    """Live prices for the panel's moving tape: BTC, a few tickers, Fear & Greed (about 1-2 s, nothing saved)."""
+    """Live prices for the panel's moving tape: BTC, the tape tickers, ETH / ZEC, both issuers' mNAV, Fear & Greed
+    (a couple of seconds, nothing saved)."""
     from concurrent.futures import ThreadPoolExecutor
 
-    with ThreadPoolExecutor(3) as ex:
+    with ThreadPoolExecutor(6) as ex:
         fb = ex.submit(btc)
         fe = ex.submit(equities, list(tickers or TAPE_TICKERS))
+        fc = {c: ex.submit(coinbase, f"{c}-USD") for c in TAPE_CRYPTO}
         ff = ex.submit(fear_greed)
-        return {"as_of": utcnow().isoformat(), "btc": fb.result(), "equities": fe.result(),
+        fm = ex.submit(strategy_mnav)
+        fs = ex.submit(strive_inputs)
+        b, eq = fb.result(), fe.result()
+        mnav = {"MSTR": fm.result(), "ASST": strive_mnav(fs.result(), (eq.get("ASST") or {}).get("price"), b.get("price"))}
+        return {"as_of": utcnow().isoformat(), "btc": b, "equities": eq,
+                "crypto": {c: f.result() for c, f in fc.items()}, "mnav": {k: v for k, v in mnav.items() if v},
                 "fear_greed": ff.result()}
 
 
@@ -323,14 +380,17 @@ def take_snapshot(save: bool = True) -> dict:
             derived["sata_effective_yield_pct"] = round(m["sata_annual_rate_pct"] * 100 / sata["price"], 2)
     btc_px = data["btc"].get("price")
     holdings = {"MSTR": m.get("mstr_btc_holdings"), "ASST": m.get("asst_btc_holdings")}
-    if btc_px and any(holdings.values()):
-        caps = market_caps([t for t, h in holdings.items() if h])
+    if btc_px:
         for t, h in holdings.items():
-            if h and caps.get(t):
-                nav = h * btc_px
+            if h:
                 derived[f"{t.lower()}_btc_holdings"] = h
-                derived[f"{t.lower()}_btc_nav_usd_bn"] = round(nav / 1e9, 2)
-                derived[f"{t.lower()}_basic_mnav"] = round(caps[t] / nav, 2)
+                derived[f"{t.lower()}_btc_nav_usd_bn"] = round(h * btc_px / 1e9, 2)
+    # mNAV as each issuer publishes it (enterprise value / bitcoin NAV), not market cap / NAV
+    asst_px = (eq.get("ASST") or {}).get("price") or (equities(["ASST"]).get("ASST") or {}).get("price")
+    for t, mv in (("MSTR", strategy_mnav()), ("ASST", strive_mnav(strive_inputs(), asst_px, btc_px))):
+        if mv.get("value"):
+            derived[f"{t.lower()}_mnav"] = round(mv["value"], 3)
+            derived[f"{t.lower()}_mnav_method"] = mv["method"]
     data["derived"] = derived
 
     if save:

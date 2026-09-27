@@ -124,5 +124,26 @@ class Inputs(unittest.TestCase):
         self.assertEqual(m["mstr_btc_holdings"], 1.0)
 
 
+class Mnav(unittest.TestCase):
+    # Strive's dashboard, Sep 27 2026: ASST $29.44, BTC $84,670.07, evMnav 1.6972 (EV = fully diluted shares x price
+    # + debt + SATA notional - cash - marketable securities)
+    STRIVE = {"shares": 100144713, "debt": 0.0, "cash": 229600000.0, "securities": 49748000.0,
+              "preferred": 1118416000.0, "btc": 26355.180562789996, "mnav": 1.6972, "date": "2026-09-27"}
+
+    def test_strive_matches_its_own_dashboard(self):
+        self.assertAlmostEqual(market.strive_mnav(self.STRIVE, 29.44, 84670.07)["value"], 1.6972, places=4)
+
+    def test_strive_without_live_prices_uses_its_published_number(self):
+        self.assertEqual(market.strive_mnav(self.STRIVE, None, None)["value"], 1.6972)
+        self.assertEqual(market.strive_mnav({}, 29.44, 84670.07), {})
+
+    def test_strategy_uses_the_published_mnav(self):
+        payload = {"results": {"mNav": 1.1971, "extendedSession": {"sessionType": "Post-Market", "mNav": 1.1862}}}
+        resp = mock.Mock(json=mock.Mock(return_value=payload), raise_for_status=mock.Mock())
+        with mock.patch.object(market.httpx, "get", return_value=resp):
+            got = market.strategy_mnav()
+        self.assertEqual((got["value"], got["extended"]), (1.1971, 1.1862))
+
+
 if __name__ == "__main__":
     unittest.main()

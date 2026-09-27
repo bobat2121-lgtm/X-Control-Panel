@@ -72,6 +72,15 @@ a[data-testid="stTopNavLink"][aria-current="page"] {
 }
 a[data-testid="stTopNavLink"][aria-current="page"] p { color: #fff !important; text-shadow: 0 1px 0 rgba(0, 0, 0, .4); }
 [data-testid="stToolbar"] button, [data-testid="stToolbar"] button span { color: var(--tan2) !important; }
+/* the header dock (panel/scene.js): a discreet status line left of Share; a small plaque in the page when it can't fit */
+.xcp-dock { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-family: var(--crisp); font-weight: 600;
+  font-size: 12.5px; letter-spacing: .02em; color: var(--tan2); padding: 3px 10px; background: rgba(26, 20, 16, .9);
+  border: 1px solid rgba(230, 180, 34, .45); border-radius: 2px; box-shadow: 2px 3px 0 rgba(0, 0, 0, .5); cursor: default; }
+.xcp-dock i { width: 7px; height: 7px; border-radius: 50%; background: var(--jade); box-shadow: 0 0 0 2px rgba(63, 122, 58, .3); }
+.xcp-dock.docked { position: fixed; top: 0; right: var(--xcp-dock-right, 72px); height: 58px; z-index: 1000002; padding: 0;
+  background: none; border: 0; box-shadow: none; color: var(--tan); font-size: 12px; opacity: .85; }
+.xcp-dock.docked:hover { opacity: 1; color: var(--tan2); }
+[data-testid="stElementContainer"]:has(.xcp-dock.docked) { position: absolute !important; width: 0; height: 0; margin: 0; }
 
 /* ---------------------------------------------------------------- cards: washi paper in a wooden frame */
 [class*="st-key-card"], [class*="st-key-hot"] {
@@ -160,8 +169,19 @@ a[data-testid="stTopNavLink"][aria-current="page"] p { color: #fff !important; t
 @media (min-width: 641px) {
   .st-key-if_filters [data-testid="stColumn"] { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
   .st-key-if_filters [data-testid="stColumn"]:has(.st-key-if_cats) { flex: 1 1 0 !important; }
-  .st-key-if_filters :is(.st-key-if_pri, .st-key-if_ref) :is(label, p, button) { white-space: nowrap; }
+  .st-key-if_filters :is(.st-key-if_pri, .st-key-if_ref, .st-key-if_chk) :is(label, p, button) { white-space: nowrap; }
 }
+/* Check now over Priority, each half as tall as Refresh beside them */
+.st-key-if_stack { gap: 4px !important; }
+.st-key-if_stack .st-key-if_chk button { min-height: 30px !important; height: 30px; padding-top: 0 !important; padding-bottom: 0 !important; }
+.st-key-if_stack .st-key-if_chk button p { font-size: 14px; }
+.st-key-if_stack [data-testid="stCheckbox"] { width: 100% !important; height: 30px; box-sizing: border-box; display: flex;
+  align-items: center; padding-top: 0 !important; padding-bottom: 0 !important; }
+@media (min-width: 641px) {
+  .st-key-if_filters:has(.st-key-if_chk) .st-key-if_ref button { min-height: 64px !important; height: 64px; }
+}
+/* the first post time sits as close under the filters as a showcase card sits under its post time */
+.xcp-slot.first { margin-top: 10px; }
 
 /* ---------------------------------------------------------------- inputs: sunken paper */
 [data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"], [data-testid="stNumberInputContainer"],
@@ -316,21 +336,22 @@ hr { border-color: var(--gold) !important; opacity: .7; box-shadow: 0 2px 0 rgba
 
 /* Streamlit pulls every markdown block up by 1rem (to eat a paragraph's margin); plain HTML blocks have none. */
 [data-testid="stMarkdownContainer"]:has(> .xcp-poston, > .xcp-lbl, > .xcp-slot, > .xcp-news, > .xcp-idea-h, > .xcp-comp-h,
-  > .xcp-muted, > .xcp-chips, > .xcp-surf, > .xcp-sc) { margin-bottom: 0 !important; }
+  > .xcp-muted, > .xcp-chips, > .xcp-surf, > .xcp-sc, > .xcp-dock) { margin-bottom: 0 !important; }
 .xcp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 1px 0 3px; }
 .xcp-chips .xcp-badge { margin: 0; }
 
 /* ---------------------------------------------------------------- monitor: view switcher (shoji tabs) */
 .st-key-mon_view { margin: 4px 0 6px; }
 .st-key-mon_view [data-testid="stButtonGroup"] { gap: 3px; }
-.st-key-mon_view [data-testid="stButtonGroup"] button { box-shadow: inset 0 1px 0 #fff, 3px 4px 0 rgba(0, 0, 0, .45) !important; }
-.st-key-mon_view [data-testid="stButtonGroup"] button { background: var(--bevel) !important; border-bottom: none !important;
-  border-radius: 5px 5px 0 0 !important; box-shadow: inset 0 1px 0 #fff !important; min-height: 44px; }
+/* view tabs: a full outline, rounded on top and square at the bottom */
+.st-key-mon_view [data-testid="stButtonGroup"] button { background: var(--bevel) !important; border: 2px solid var(--wood-d) !important;
+  border-radius: 7px 7px 0 0 !important; box-shadow: inset 0 1px 0 #fff, 3px 4px 0 rgba(0, 0, 0, .45) !important; min-height: 44px; }
 .st-key-mon_view [data-testid="stButtonGroup"] button p { font-size: 16px; letter-spacing: .05em; text-transform: uppercase; }
 .st-key-mon_view [data-testid="stButtonGroup"] button[aria-checked="true"],
 .st-key-mon_view [data-testid="stButtonGroup"] button[aria-pressed="true"],
 .st-key-mon_view [data-testid="stButtonGroup"] button[data-selected="true"] {
-  background: var(--lacquer) !important; color: var(--paper) !important; box-shadow: inset 0 4px 0 var(--accent), inset 0 5px 0 var(--gold) !important; }
+  background: var(--lacquer) !important; color: var(--paper) !important; border-color: #000 !important;
+  box-shadow: inset 0 4px 0 var(--accent), inset 0 5px 0 var(--gold), inset 0 0 0 1px var(--gold), 3px 4px 0 rgba(0, 0, 0, .45) !important; }
 
 /* ---------------------------------------------------------------- monitor: slot header (a lacquered plaque) */
 .xcp-slot { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; margin: 26px 0 10px;

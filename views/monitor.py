@@ -433,7 +433,7 @@ def _hm(td: timedelta) -> str:
     return f"{h}h {m:02d}m" if h < 24 else f"{h // 24}d {h % 24}h"
 
 
-def slot_header(o: dict, n: int, first_up: bool, now, sc: dict | None = None) -> None:
+def slot_header(o: dict, n: int, first_up: bool, now, sc: dict | None = None, top: bool = False) -> None:
     t = o["post_at"]
     hh, ampm = t.strftime("%I:%M").lstrip("0"), t.strftime("%p")
     day = ("Today" if t.date() == now.date() else "Tomorrow" if t.date() == (now + timedelta(days=1)).date()
@@ -451,7 +451,7 @@ def slot_header(o: dict, n: int, first_up: bool, now, sc: dict | None = None) ->
         right.append(badge(f"🖼 {sc['title']} · {SC_PHASE[sc['phase']][1].lower()}", SC_PHASE[sc["phase"]][2]))
     lane = "BTC lane · digital credit, stablecoins, legislation, bitcoin, macro" if o["lane"] == "btc" else "AI lane"
     run = f" · desk picks land at {o['run_at']}" if o.get("run_at") and not o["passed"] else ""
-    cls = "xcp-slot" + (" next" if first_up else "") + (" past" if o["passed"] else "")
+    cls = "xcp-slot" + (" next" if first_up else "") + (" past" if o["passed"] else "") + (" first" if top else "")
     st.markdown(f'<div class="{cls}"><div class="t">{hh}<small>{ampm}</small></div>'
                 f'<div class="m"><div class="l">{esc_html(o["label"])} · {day}</div>'
                 f'<div class="s">{esc_html(lane)} · {n} idea{"s" if n != 1 else ""}{esc_html(run)}</div></div>'
@@ -635,14 +635,16 @@ groups = ideas.assign(stories72, _briefs(), occs, now, INDEX)
 POOL = [x for L in groups.values() for x in L]  # for "More on this" under an opened idea
 upcoming = [o for o in occs if not o["passed"]]
 nxt = upcoming[0] if upcoming else None
-if owner:
-    tb = st.columns([5, 1.3])
-    tb[0].caption(f"Last check {fmt_ago(parse_iso(last['at']))}: {last.get('news_new', 0)} new stories · "
-                  f"{last.get('x_new', 0)} new posts from your accounts · {last.get('priority', 0)} flagged · Discord "
-                  f"only pings when a Digital Credit Report panel goes live" if last.get("at")
-                  else "The monitor hasn't run yet.")
-    tb[1].button("🔄 Check now", on_click=_check_now, width="stretch", type="primary",
-                 help="Pulls the news feeds right away; X and SEC filings follow from the cloud")
+if owner:  # rides in the header next to Share when there's room (panel/scene.js docks it), else a small line here
+    if last.get("at"):
+        short = (f"Last check {fmt_ago(parse_iso(last['at']))} · {last.get('news_new', 0)} new · "
+                 f"{last.get('x_new', 0)} from your 7 · {last.get('priority', 0)} flagged")
+        full = (f"Last check {fmt_ny(parse_iso(last['at']))} ET: {last.get('news_new', 0)} new stories, "
+                f"{last.get('x_new', 0)} new posts from your accounts, {last.get('priority', 0)} flagged. Discord only "
+                f"pings when a Digital Credit Report panel goes live.")
+    else:
+        short = full = "The monitor hasn't run yet."
+    st.markdown(f'<div class="xcp-dock" title="{esc_html(full)}"><i></i>{esc_html(short)}</div>', unsafe_allow_html=True)
 
 pins = _writer()["pins"]
 view = st.segmented_control("View", VIEWS, key="mon_view", required=True, label_visibility="collapsed",
@@ -653,7 +655,11 @@ view = st.segmented_control("View", VIEWS, key="mon_view", required=True, label_
 if view == VIEWS[0]:
     f = st.container(key="if_filters").columns([7.4, 1.8, 1], vertical_alignment="bottom")   # categories stay on one line
     cats = f[0].pills("Categories", CATS, format_func=CAT_SHORT.get, selection_mode="multi", key="if_cats")
-    pri_only = f[1].toggle("⚡ Priority", key="if_pri", help="Show only priority ideas")
+    with f[1].container(key="if_stack"):  # Check now over Priority, together as tall as Refresh
+        if owner:
+            st.button("🔄 Check now", on_click=_check_now, width="stretch", type="primary", key="if_chk",
+                      help="Pulls the news feeds right away; X and SEC filings follow from the cloud")
+        pri_only = st.toggle("⚡ Priority", key="if_pri", help="Show only priority ideas")
     f[2].button("↻ Refresh", on_click=_bust, width="stretch", key="if_ref")
 
     def keep(x: dict) -> bool:
@@ -662,13 +668,15 @@ if view == VIEWS[0]:
     shown = 0
     sc_states = {o["key"]: cache.get(("sc_state", o["key"]), lambda o=o: ideas.showcase_state(o), ttl=60)
                  for o in occs if o.get("panel")}
+    headed = False
     live_sc = [o for o in occs if o["passed"] and (sc_states.get(o["key"]) or {}).get("phase") in ideas.LIVE_PHASES]
     for o in live_sc + [o for o in occs if o not in live_sc]:  # a report panel still due goes first, past its slot time
         items = [x for x in groups.get(o["key"], []) if keep(x)]
         sc = sc_states.get(o["key"])
         if o["passed"] and not items and o not in live_sc:
             continue
-        slot_header(o, len(items), o is nxt, now, sc)
+        slot_header(o, len(items), o is nxt, now, sc, top=not headed)
+        headed = True
         if sc:
             showcase_card(o, sc, now)
         if not items:

@@ -799,6 +799,23 @@
   addEventListener('keydown', e => { if (e.key === 'Escape') document.body.classList.remove('xcp-world-view'); });
   document.body.appendChild(btn);
 
+  // header dock: a small status line (the Monitor's "Last check") rides in the header, just left of the toolbar
+  // (Share, menu), whenever the gap after the page links has room for it; otherwise it stays where the page put it
+  function dock() {
+    const el = document.querySelector('.xcp-dock');
+    if (!el) return;
+    const nav = '[data-testid="stTopNavSection"], a[data-testid="stTopNavLink"]';
+    const navEnd = Math.max(0, ...[...document.querySelectorAll(nav)].map(e => e.getBoundingClientRect().right));
+    const lefts = [...document.querySelectorAll('[data-testid="stHeader"] :is(button, a)')]   // Share, Deploy, icons, menu
+      .filter(e => !e.closest(nav) && !el.contains(e)).map(e => e.getBoundingClientRect())
+      .filter(r => r.width > 0 && r.left > Math.max(navEnd, innerWidth * 0.4)).map(r => r.left);
+    const right = lefts.length ? Math.min(...lefts) : innerWidth - 16;
+    const fits = right - navEnd > el.scrollWidth + 40;
+    document.documentElement.style.setProperty('--xcp-dock-right', Math.round(innerWidth - right + 14) + 'px');
+    if (el.classList.contains('docked') !== fits) el.classList.toggle('docked', fits);
+  }
+  setInterval(dock, 600);
+
   window.__xcpWorld = {
     poke() { if (!document.body.contains(cvs)) document.body.prepend(cvs); if (!document.body.contains(btn)) document.body.appendChild(btn); },
     phase(p) { phaseOffset = p - ((Date.now() / 1000) % DAY) / DAY; world.skyKey = -1; },
