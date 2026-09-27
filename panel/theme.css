@@ -156,6 +156,12 @@ a[data-testid="stTopNavLink"][aria-current="page"] p { color: #fff !important; t
 :is(.st-key-if_cats, .st-key-mon_topics) [data-testid="stButtonGroup"] button { flex: 0 0 auto; white-space: nowrap;
   padding-left: 9px !important; padding-right: 9px !important; }
 :is(.st-key-if_cats, .st-key-mon_topics) [data-testid="stButtonGroup"] > div { gap: 5px !important; }
+/* the priority toggle and Refresh keep their full labels; only the category strip gives up room */
+@media (min-width: 641px) {
+  .st-key-if_filters [data-testid="stColumn"] { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
+  .st-key-if_filters [data-testid="stColumn"]:has(.st-key-if_cats) { flex: 1 1 0 !important; }
+  .st-key-if_filters :is(.st-key-if_pri, .st-key-if_ref) :is(label, p, button) { white-space: nowrap; }
+}
 
 /* ---------------------------------------------------------------- inputs: sunken paper */
 [data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"], [data-testid="stNumberInputContainer"],

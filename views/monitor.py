@@ -548,7 +548,7 @@ view = st.segmented_control("View", VIEWS, key="mon_view", required=True, label_
 
 # ------------------------------------------------------------------ 🗞 idea feed
 if view == VIEWS[0]:
-    f = st.columns([7.4, 1.8, 1], vertical_alignment="bottom")   # categories stay on one line
+    f = st.container(key="if_filters").columns([7.4, 1.8, 1], vertical_alignment="bottom")   # categories stay on one line
     cats = f[0].pills("Categories", CATS, format_func=CAT_SHORT.get, selection_mode="multi", key="if_cats")
     pri_only = f[1].toggle("⚡ Priority", key="if_pri", help="Show only priority ideas")
     f[2].button("↻ Refresh", on_click=_bust, width="stretch", key="if_ref")
