@@ -12,7 +12,7 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel import cache
-from panel.common import (page, PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, hero, is_owner, last_monitor_run,
+from panel.common import (page, PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, is_owner, last_monitor_run,
                           pillar_badge)
 from xcp import config, db, gh, ideas, showcase, xtext
 from xcp.agents import monitor
@@ -27,6 +27,7 @@ VIEWS = ["🗞 Idea feed", "✍️ Writer", "📡 Live wire", "🎙 Your 7", "�
 AI_GROUP = ("ai_models", "ai_benchmarks", "physical_ai")
 CATS = ["digital_credit", "stablecoins", "ai_payments", "legislation", "bitcoin", "macro", "ai"]
 CAT_LABEL = {**{k: f"{PILLAR_GLYPHS.get(k, '•')} {LABEL.get(k, k)}" for k in CATS}, "ai": "◈ AI models & robots"}
+CAT_SHORT = {**CAT_LABEL, "legislation": f"{PILLAR_GLYPHS['legislation']} Legislation", "ai": "◈ AI & robots"}  # one line
 PAGE = 9  # ideas per post time before "show more"
 WRITER_KV = "monitor:writer"
 owner = is_owner()
@@ -531,25 +532,12 @@ groups = ideas.assign(stories72, _briefs(), occs, now, INDEX)
 POOL = [x for L in groups.values() for x in L]  # for "More on this" under an opened idea
 upcoming = [o for o in occs if not o["passed"]]
 nxt = upcoming[0] if upcoming else None
-cut12, cut24 = utcnow() - timedelta(hours=12), utcnow() - timedelta(hours=24)
-_pri = sum(1 for c in stories72 if c["priority"] and c["status"] != "hidden" and c["newest"] >= cut12)
-_watch24 = sum(1 for c in stories72 if c["lead"].kind == "x_post" and (c["lead"].meta or {}).get("watchlist")
-               and c["newest"] >= cut24)
-_n_sources = len(monitor.feeds()) + len(monitor.watchlist_handles()) + 2
-hero("MONITOR.EXE", "Ideas for your <em>next post</em>.",
-     "Ideas sit under the times you post. Open one to see the news, the numbers and every source full width, "
-     "then write next to it or move it to the Writer tab. You write the posts.",
-     stats=[(nxt["post_at"].strftime("%I:%M %p").lstrip("0") if nxt else "—",
-             f"next · {nxt['label'].split(' ', 1)[-1]}" if nxt else "next post", True),
-            (len(groups.get(nxt["key"], [])) if nxt else 0, "ideas for it"),
-            (_pri, "⚡ priority · 12h", _pri > 0), (_watch24, "🎙 your 7 · 24h")],
-     kicker=(f"live wire · checked {fmt_ago(parse_iso(last['at']))} · {_n_sources} sources" if last.get("at")
-             else f"live wire · {_n_sources} sources"), icon="📡")
 if owner:
     tb = st.columns([5, 1.3])
-    tb[0].caption(f"Last check: {last.get('news_new', 0)} new stories · {last.get('x_new', 0)} new posts from your "
-                  f"accounts · {last.get('priority', 0)} flagged · Discord only pings when a Digital Credit Report "
-                  f"panel goes live" if last.get("at") else "The monitor hasn't run yet.")
+    tb[0].caption(f"Last check {fmt_ago(parse_iso(last['at']))}: {last.get('news_new', 0)} new stories · "
+                  f"{last.get('x_new', 0)} new posts from your accounts · {last.get('priority', 0)} flagged · Discord "
+                  f"only pings when a Digital Credit Report panel goes live" if last.get("at")
+                  else "The monitor hasn't run yet.")
     tb[1].button("🔄 Check now", on_click=_check_now, width="stretch", type="primary",
                  help="Pulls the news feeds right away; X and SEC filings follow from the cloud")
 
@@ -560,9 +548,9 @@ view = st.segmented_control("View", VIEWS, key="mon_view", required=True, label_
 
 # ------------------------------------------------------------------ 🗞 idea feed
 if view == VIEWS[0]:
-    f = st.columns([4.6, 1.7, 1])
-    cats = f[0].pills("Categories", CATS, format_func=CAT_LABEL.get, selection_mode="multi", key="if_cats")
-    pri_only = f[1].toggle("⚡ Priority only", key="if_pri")
+    f = st.columns([7.4, 1.8, 1], vertical_alignment="bottom")   # categories stay on one line
+    cats = f[0].pills("Categories", CATS, format_func=CAT_SHORT.get, selection_mode="multi", key="if_cats")
+    pri_only = f[1].toggle("⚡ Priority", key="if_pri", help="Show only priority ideas")
     f[2].button("↻ Refresh", on_click=_bust, width="stretch", key="if_ref")
 
     def keep(x: dict) -> bool:
