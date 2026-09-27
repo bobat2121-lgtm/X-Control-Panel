@@ -7,7 +7,7 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel import cache
-from panel.common import (STATUS_ICONS, badge, card_key, enqueue, esc_html, esc_md, handle, hero, is_owner, page,
+from panel.common import (STATUS_ICONS, badge, card_key, enqueue, esc_html, esc_md, handle, is_owner, page,
                           pillar_badge, section)
 from xcp import charts, config, db, gh, showcase, xtext
 from xcp.agents import analyst
@@ -351,27 +351,7 @@ def render_draft(d: db.Draft, data: dict) -> None:
 # ------------------------------------------------------------------ page
 
 _today = today_ny()
-_mine = [x for x in _day(_today.isoformat())["drafts"] if x.status != "dismissed"]
-_now = now_ny()
-_next = None
-for _off in range(0, 8):
-    _dd = _now.date() + timedelta(days=_off)
-    _cands = [(at_ny(_dd, sp["post_at"]), k) for k, sp in SLOTS.items()
-              if days_match(sp.get("days"), _dd) and at_ny(_dd, sp["post_at"]) > _now]
-    if _cands:
-        _next = min(_cands)
-        break
 _mix = cache.get(("feed", "mix"), lambda: analyst.mix(7), ttl=120)
-_ai = _mix["shares"].get("ai", 0.0)
-hero("FEED.EXE", "Your posts, <em>ready to ship</em>.",
-     "Everything you've written from the Monitor, plus showcase images. Edit, post, mark it posted, and it joins "
-     "your voice library.",
-     stats=[(len(_mine), "written today"), (sum(1 for x in _mine if x.status == "posted"), "posted today"),
-            (_next[0].strftime("%I:%M %p").lstrip("0") if _next else "—",
-             f"next · {slot_label(_next[1])}" if _next else "next slot"),
-            (f"{_ai:.0f}%", f"AI share 7d · target {_mix['targets'].get('ai', 20)}%", abs(_ai - _mix['targets'].get('ai', 20)) > 10
-             and _mix["total"] >= 5)],
-     kicker=f"{_today:%A %b %d} · {_mix['total']} posts in the last 7 days", icon="📰")
 
 with st.container(key="isle_feed_top"):  # floats over the world as one island
     top = st.columns([1.15, 1.5, 1.35], gap="large")

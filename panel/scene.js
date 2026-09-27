@@ -557,7 +557,7 @@
 
   function lightOn(night, th) { return night > th; }
 
-  let last = 0, tPrev = 0, stages = [], stageScan = 0, cssKey = -1;
+  let last = 0, tPrev = 0, cssKey = -1;
   function loop() {                               // a timer loop: steady 24 fps, paused in hidden tabs
     setTimeout(loop, reduced ? 1000 : 1000 / FPS);
     if (document.hidden || !world) return;
@@ -766,21 +766,6 @@
       w.petals = w.petals.filter(pt => !pt.dead);
     }
 
-    // windows onto the world: page banners show exactly the part of the world behind them
-    if (now - stageScan > 800) { stages = Array.from(document.querySelectorAll('.xcp-stage')); stageScan = now; }
-    for (const st of stages) {
-      let sc = st.querySelector(':scope > canvas.xcp-stage-cv');
-      if (!sc) { sc = document.createElement('canvas'); sc.className = 'xcp-stage-cv'; sc.setAttribute('aria-hidden', 'true'); st.prepend(sc); }
-      if (sc.offsetParent === null) continue;          // hidden: the world already shows straight through
-      const r = st.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > innerHeight || r.width < 2) continue;
-      const sx = r.left / S, sy = r.top / S, sw = r.width / S, sh = r.height / S;
-      const cw = Math.max(1, Math.round(sw)), ch = Math.max(1, Math.round(sh));
-      if (sc.width !== cw || sc.height !== ch) { sc.width = cw; sc.height = ch; }
-      const g = sc.getContext('2d');
-      g.clearRect(0, 0, cw, ch);
-      g.drawImage(cvs, sx, sy, sw, sh, 0, 0, cw, ch);
-    }
     // the panel follows the hour too
     const ck = Math.floor(T);
     if (ck !== cssKey) {

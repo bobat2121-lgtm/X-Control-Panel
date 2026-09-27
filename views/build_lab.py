@@ -5,7 +5,7 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel import cache
-from panel.common import page, badge, card_key, enqueue, esc_md, hero, is_owner, pillar_badge, section
+from panel.common import page, badge, card_key, enqueue, esc_md, is_owner, pillar_badge, section
 from xcp import config, db, showcase, xtext
 from xcp.timeutil import fmt_ago, today_ny, utcnow
 
@@ -145,13 +145,6 @@ with db.session() as s:
     ideas = list(s.scalars(select(db.BuildIdea).order_by(db.BuildIdea.created_at.desc())).all())
 
 live = [i for i in ideas if i.status != "archived"]
-_count = {k: sum(1 for i in ideas if i.status == k) for k in STATUSES}
-hero("BUILDLAB.EXE", "Ideas worth <em>building</em>.",
-     "Creations the Strategist proposes from what's surfacing and what performs, each with a build prompt you can "
-     "paste into Claude Code or Codex.",
-     stats=[(_count["inbox"], "💡 inbox"), (_count["shortlist"], "⭐ shortlist"),
-            (_count["building"], "🔨 building", _count["building"] > 0), (_count["shipped"], "🚢 shipped")],
-     kicker=f"{len(live)} live ideas · showcase panels Mon / Wed / Fri", icon="🛠")
 
 # --- showcase lineup (fixed: the Digital Credit Report panels, audited before each post)
 section("Showcase lineup", "your Digital Credit Report panels")

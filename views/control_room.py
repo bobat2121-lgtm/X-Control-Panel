@@ -7,14 +7,13 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import select
 
-from panel import cache
-from panel.common import page, badge, enqueue, hero, is_owner, last_monitor_run, section
+from panel.common import page, badge, enqueue, is_owner, section
 from xcp import config, db, gh, notify, showcase
 from xcp import voice as voice_mod
 from xcp.agents.collect import x_reads_this_month, x_reads_today
 from xcp.config import env
 from xcp.sources import calendar_feeds, issuers
-from xcp.timeutil import fmt_ago, fmt_ny, parse_iso, today_ny
+from xcp.timeutil import fmt_ny, parse_iso, today_ny
 
 page("CONTROLROOM")  # this page's tab title and pixel icon (bookmarks pick them up)
 
@@ -34,24 +33,6 @@ if not is_owner():
 
 settings = config.settings()
 _lim = settings.get("limits", {})
-_reads, _cap = cache.get(("cr", "reads"), x_reads_this_month, ttl=60), int(_lim.get("x_monthly_post_cap", 4000))
-_mon = last_monitor_run()
-
-
-def _pending_count() -> int:
-    with db.session() as s:
-        return len(db.pending_requests(s))
-
-
-_queued = cache.get(("cr", "queued"), _pending_count, ttl=20)
-_mode = settings.get("writer", {}).get("mode", "monitor")
-hero("CONTROLROOM.EXE", "The <em>engine room</em>.",
-     "Agents, schedule, sources, voice and budgets. Everything the monitor and desk run on.",
-     stats=[(f"{_reads:,}", f"X reads this month · cap {_cap:,}", _reads > .8 * _cap),
-            (fmt_ago(parse_iso(_mon.get("at"))) if _mon.get("at") else "—", "monitor last ran"),
-            ("Monitor" if _mode == "monitor" else "Drafts", "writer mode"),
-            (_queued, "AI requests queued", _queued > 0)],
-     kicker=f"≈ ${_reads * 0.005:.2f} of ${_cap * 0.005:.0f} X budget used", icon="⚙️")
 # Only the open tab runs (switching tabs reruns), so a click here doesn't rebuild all eight.
 t_agents, t_show, t_settings, t_watch, t_voice, t_style, t_market, t_cal = st.tabs(
     ["🛰 Agents", "🛠 Showcase", "⚙️ Settings", "👀 Watchlist", "🗣 Voice & rules", "📚 Style library",

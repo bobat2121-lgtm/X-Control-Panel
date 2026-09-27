@@ -1,7 +1,6 @@
 """Shared panel helpers: boot, market strip, badges, queueing agent work."""
 from __future__ import annotations
 
-import base64
 import hmac
 import html
 import os
@@ -42,12 +41,6 @@ def _cached(path: Path, render) -> str:
         hit = (mtime, render(path))
         _FILES[str(path)] = hit
     return hit[1]
-
-
-def icon_uri(name: str) -> str:
-    """A pixel icon as a data URI (for title bars)."""
-    path = ICON_DIR / f"{name}-32.png"
-    return _cached(path, lambda p: "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode())
 
 
 def page(key: str) -> None:
@@ -128,29 +121,6 @@ def pillar_badge(pillar: str) -> str:
     label = config.pillars().get(pillar, {}).get("label", pillar)
     glyph = PILLAR_GLYPHS.get(pillar, "•") + "\ufe0e"  # text style, never the colour emoji (⚙ turns into one)
     return f'<span class="xcp-badge xcp-b-tan"><span class="g">{esc_html(glyph)}</span>{esc_html(label)}</span>'
-
-
-def hero(app: str, headline: str, sub: str = "", stats: list[tuple] | None = None, kicker: str = "",
-         icon: str = "▣") -> None:
-    """Page banner: a lacquered title bar, then a window onto the world (the scene draws the part of the world
-    behind it) with the headline plate and stat tiles standing in front.
-
-    stats: (value, label) or (value, label, hot). headline may contain <em> (lantern gold); everything else is escaped.
-    (The only thing that scrolls in the app is the price tape above.)"""
-    who = handle()
-    key = app.replace(".EXE", "").replace(" ", "").upper()
-    name, kanji, ico = PAGES.get(key, (app.title(), "", "app"))
-    tiles = "".join(f'<div class="xcp-stat{" hot" if len(x) > 2 and x[2] else ""}"><div class="v">{esc_html(x[0])}</div>'
-                    f'<div class="l">{esc_html(x[1])}</div></div>' for x in (stats or []))
-    safe_headline = esc_html(headline).replace("&lt;em&gt;", "<em>").replace("&lt;/em&gt;", "</em>")
-    st.markdown(
-        f'<section class="xcp-hero"><div class="xcp-tb"><span class="xcp-tb-l"><img class="xcp-tb-ico" alt="" '
-        f'src="{icon_uri(ico)}">{esc_html(name.upper())} · <span class="jp">{esc_html(kanji)}</span>'
-        f'{" — @" + esc_html(who) if who else ""}</span><span class="xcp-tb-r xcp-clock"></span></div>'
-        f'<div class="xcp-hero-in xcp-stage"><div class="xcp-plate"><div class="xcp-kicker"><span class="dot">●</span> '
-        f'{esc_html(kicker)}<span class="caret"></span></div><h1 class="xcp-h1">{safe_headline}</h1>'
-        f'<p class="xcp-sub">{esc_html(sub)}</p></div><div class="xcp-stats">{tiles}</div></div></section>',
-        unsafe_allow_html=True)
 
 
 def section(title: str, note: str = "") -> None:

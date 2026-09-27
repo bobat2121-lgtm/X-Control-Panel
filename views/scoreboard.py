@@ -9,7 +9,7 @@ import streamlit as st
 from sqlalchemy import select
 
 from panel import cache
-from panel.common import page, esc_md, hero, is_owner, section
+from panel.common import page, esc_md, is_owner, section
 from xcp import config, db
 from xcp.agents import analyst
 from xcp.agents.collect import classify
@@ -48,13 +48,11 @@ for p in posts:
 df = pd.DataFrame(rows)
 
 _eng = df["eng_rate"].dropna().mean() if len(df) and df["eng_rate"].notna().any() else None
-hero("SCOREBOARD.EXE", "What's <em>working</em>.",
-     "Your posts, their reach, and whether you're on the 80/20 mix. Your X posts are imported nightly.",
-     stats=[(len(df), f"posts · {days}d"), (f"{df['impressions'].mean():,.0f}" if len(df) else "—", "avg impressions"),
-            (f"{_eng:.2f}%" if _eng is not None else "—", "avg engagement", bool(_eng and _eng >= 3)),
-            (f"{sum(1 for p in posts if p.draft_id)}/{len(posts)}" if posts else "—", "written in the panel")],
-     kicker=f"{days}-day window", icon="📊")
 st.segmented_control("Window", [7, 14, 30, 90], default=30, format_func=lambda d: f"{d}d", key="sb_days")
+if len(df):
+    st.caption(f"{len(df)} posts in {days} days · avg {df['impressions'].mean():,.0f} impressions"
+               + (f" · {_eng:.2f}% avg engagement" if _eng is not None else "")
+               + f" · {sum(1 for p in posts if p.draft_id)}/{len(posts)} written in the panel · X posts import nightly")
 
 if df.empty:
     st.info("No tracked posts yet. Posts are imported nightly from X once your handle and X API key are set, "
