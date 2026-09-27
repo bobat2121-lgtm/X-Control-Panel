@@ -8,11 +8,12 @@ Ideas are plain dicts (JSON-safe) so the Writer tab can pin them.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, select
 
 from xcp import config, db, showcase
+from xcp.sources import digital_exposure as de
 from xcp.timeutil import at_ny, aware, days_match, now_ny, parse_iso, utcnow
 
 HORIZON_HOURS = 36  # upcoming slots shown ahead, plus the next slot of every lane however far away
@@ -307,12 +308,51 @@ def assign(stories: list[dict], briefs: list[dict], occs: list[dict], now: datet
     return out
 
 
-def showcase_status(occ: dict) -> str | None:
+SHOWCASE_QUIET_MINUTES = 15  # a run still waiting with no check for this long: the watcher isn't running
+LIVE_PHASES = ("waiting", "blocked", "ready")  # still needs you (or the watcher)
+
+
+def showcase_state(occ: dict, now: datetime | None = None) -> dict | None:
+    """Where the Digital Credit Report panel for a showcase slot stands (JSON-safe; the image stays in the DB).
+
+    phase: scheduled (window not open yet) | waiting (the watcher is checking; not ready) | blocked (the audit
+    found a problem; still retrying) | ready (image + caption are in the Feed) | posted | missed (deadline passed)."""
     if not occ.get("panel"):
         return None
+    now = now or now_ny()
+    spec = showcase.panels().get(occ["panel"], {})
+    d = date.fromisoformat(occ["date"])
+    start, nudge, deadline = (at_ny(d, spec.get(k, dflt)) for k, dflt in
+                              (("start", "00:00"), ("nudge", "23:58"), ("deadline", "23:59")))
+    out = {"panel": occ["panel"], "title": spec.get("title", occ["panel"].title()), "post": str(spec.get("post", "")),
+           "start": start.isoformat(), "nudge": nudge.isoformat(), "deadline": deadline.isoformat(),
+           "url": de.report_url(occ["panel"]), "run_id": None, "checked": None, "ready_at": None, "attempts": 0,
+           "renders": 0, "blockers": [], "warnings": [], "audit": {}, "png_sha": "", "draft_id": None,
+           "phase": "scheduled" if now < start else "missed" if now >= deadline else "waiting", "quiet": False}
+    R = db.ShowcaseRun
+    with db.session() as s:  # every column but the image
+        row = s.execute(select(R.id, R.status, R.updated_at, R.ready_at, R.attempts, R.renders, R.blockers, R.warnings,
+                               R.audit_summary, R.png_sha256, R.draft_id)
+                        .where(R.run_date == occ["date"], R.panel == occ["panel"]).order_by(R.id.desc()).limit(1)).first()
+    if row is not None:
+        out.update(run_id=row.id, phase=row.status or "waiting", checked=aware(row.updated_at).isoformat(),
+                   ready_at=aware(row.ready_at).isoformat() if row.ready_at else None, attempts=row.attempts or 0,
+                   renders=row.renders or 0, blockers=[b.get("detail", "") for b in row.blockers or [] if b.get("detail")],
+                   warnings=[w.get("detail", "") for w in row.warnings or [] if w.get("detail")],
+                   audit=row.audit_summary or {}, png_sha=row.png_sha256 or "", draft_id=row.draft_id)
+    if out["phase"] in ("waiting", "blocked") and now >= deadline:  # the watcher stopped before it could say so
+        out["phase"] = "missed"
+    if out["phase"] in ("waiting", "blocked") and start <= now < deadline:
+        checked = parse_iso(out["checked"])
+        out["quiet"] = (checked is None and now - start > timedelta(minutes=SHOWCASE_QUIET_MINUTES)) or (
+            checked is not None and now - checked > timedelta(minutes=SHOWCASE_QUIET_MINUTES))
+    return out
+
+
+def showcase_png(run_id: int) -> bytes | None:
+    """The run's latest render (the post image once it's ready)."""
     with db.session() as s:
-        run = showcase.run_for(s, occ["date"], occ["panel"])
-        return run.status if run else "waiting"
+        return s.scalar(select(db.ShowcaseRun.png).where(db.ShowcaseRun.id == run_id))
 
 
 def parse_at(x: dict) -> datetime | None:

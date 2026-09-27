@@ -316,7 +316,7 @@ hr { border-color: var(--gold) !important; opacity: .7; box-shadow: 0 2px 0 rgba
 
 /* Streamlit pulls every markdown block up by 1rem (to eat a paragraph's margin); plain HTML blocks have none. */
 [data-testid="stMarkdownContainer"]:has(> .xcp-poston, > .xcp-lbl, > .xcp-slot, > .xcp-news, > .xcp-idea-h, > .xcp-comp-h,
-  > .xcp-muted, > .xcp-chips, > .xcp-surf) { margin-bottom: 0 !important; }
+  > .xcp-muted, > .xcp-chips, > .xcp-surf, > .xcp-sc) { margin-bottom: 0 !important; }
 .xcp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 1px 0 3px; }
 .xcp-chips .xcp-badge { margin: 0; }
 
@@ -351,6 +351,50 @@ hr { border-color: var(--gold) !important; opacity: .7; box-shadow: 0 2px 0 rgba
 .xcp-slot.past .t, .xcp-slot.past .l { color: var(--ink); }
 .xcp-slot.past .s, .xcp-slot.past .t small { color: var(--mute); }
 .xcp-slot.past .t { border-right-color: var(--wood-d); }
+
+/* ---------------------------------------------------------------- monitor: showcase card (the report panel a slot posts)
+   A lacquer board under the slot plaque with a hanko seal: 予 scheduled · 待 waiting · 止 blocked · 準 ready · 済 posted
+   · 逃 missed. The seal colour, the frame and the status line all change together, so it reads from across the room. */
+[class*="st-key-sc_"] { --sc: var(--lantern); --sc-lo: rgba(247, 179, 59, .22);
+  background: var(--lacquer) !important; border: 2px solid #000; border-left: 10px solid var(--sc); border-radius: 3px;
+  padding: 14px 16px 12px 14px !important; margin: 0 0 14px; box-shadow: inset 0 0 0 1px var(--gold), 5px 6px 0 rgba(0, 0, 0, .5); }
+[class*="st-key-sc_scheduled_"] { --sc: #8E86B8; --sc-lo: rgba(142, 134, 184, .2); }
+[class*="st-key-sc_waiting_"] { --sc: var(--lantern); --sc-lo: rgba(247, 179, 59, .22); }
+[class*="st-key-sc_blocked_"] { --sc: var(--accent-hi); --sc-lo: rgba(224, 103, 63, .25); }
+[class*="st-key-sc_ready_"] { --sc: #6FCB5F; --sc-lo: rgba(111, 203, 95, .25); animation: xcp-sc-ready 2.2s ease-in-out infinite; }
+[class*="st-key-sc_posted_"] { --sc: var(--gold); --sc-lo: rgba(230, 180, 34, .18); }
+[class*="st-key-sc_missed_"] { --sc: var(--stone); --sc-lo: rgba(140, 135, 146, .2); }
+@keyframes xcp-sc-ready { 0%, 100% { box-shadow: inset 0 0 0 1px var(--gold), 5px 6px 0 rgba(0, 0, 0, .5), 0 0 0 rgba(111, 203, 95, 0); }
+  50% { box-shadow: inset 0 0 0 1px var(--gold), 5px 6px 0 rgba(0, 0, 0, .5), 0 0 26px rgba(111, 203, 95, .75); } }
+.xcp-sc { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: start; color: var(--tan2); }
+.xcp-sc .seal { width: 74px; height: 74px; display: grid; place-items: center; border: 4px solid var(--sc); border-radius: 6px;
+  background: var(--sc-lo); transform: rotate(-4deg); box-shadow: 2px 2px 0 #000; margin-top: 4px; }
+.xcp-sc .seal b { font-family: var(--jp); font-weight: 400; font-size: 46px; line-height: 1; color: var(--sc); text-shadow: 2px 2px 0 #000; }
+.xcp-sc.ready .seal { background: var(--sc); }
+.xcp-sc.ready .seal b { color: #fff; }
+.xcp-sc .k { font-family: var(--pixel); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--tan); }
+.xcp-sc .ttl { font-family: var(--display); font-style: italic; font-weight: 900; font-size: 1.55rem; line-height: 1; text-transform: uppercase;
+  color: var(--paper); margin: 3px 0 5px; text-shadow: 2px 2px 0 rgba(0, 0, 0, .6); }
+.xcp-sc .st { display: inline-flex; align-items: center; gap: 8px; font-family: var(--crisp); font-weight: 800; font-size: 1.3rem;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--sc); line-height: 1.1; }
+.xcp-sc .st i { width: 11px; height: 11px; background: var(--sc); box-shadow: 1px 1px 0 #000; }
+.xcp-sc.waiting .st i, .xcp-sc.blocked .st i { animation: xcp-blink 1.1s steps(1) infinite; }
+.xcp-sc .d { font-family: var(--sans); font-size: 14.5px; color: var(--paper); margin-top: 5px; }
+.xcp-sc .d2 { font-family: var(--sans); font-size: 12.5px; color: var(--tan); margin-top: 3px; }
+.xcp-sc .warn { display: inline-block; margin-top: 7px; padding: 3px 9px; font-family: var(--sans); font-weight: 700; font-size: 13px;
+  color: #fff; background: var(--accent); border: 1px solid #000; box-shadow: 2px 2px 0 #000; }
+.xcp-sc .tl { position: relative; height: 7px; margin-top: 11px; background: rgba(255, 255, 255, .1); border: 1px solid rgba(0, 0, 0, .6); }
+.xcp-sc .tl span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--sc); }
+.xcp-sc .tl em { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--tan2); opacity: .7; }
+.xcp-sc .tll { display: flex; justify-content: space-between; font-family: var(--pixel); font-size: 9px; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--tan); margin-top: 4px; }
+[class*="st-key-sc_"] [data-testid="stImage"] img { border: 2px solid var(--sc); box-shadow: 3px 3px 0 #000; }
+@media (max-width: 640px) {
+  .xcp-sc { grid-template-columns: 1fr; }
+  .xcp-sc .seal { width: 58px; height: 58px; }
+  .xcp-sc .seal b { font-size: 34px; }
+  .xcp-sc .tll span:nth-child(2) { display: none; }
+}
 
 /* ---------------------------------------------------------------- monitor: idea tiles (three to a row, equal height) */
 [class*="st-key-irow"] [data-testid="stHorizontalBlock"] { align-items: stretch; }

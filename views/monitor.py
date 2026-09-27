@@ -5,7 +5,8 @@ the numbers and a source under every item; write next to it, or move it to the W
 """
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+import re
 from urllib.parse import urlparse
 
 import streamlit as st
@@ -14,7 +15,7 @@ from sqlalchemy import select
 from panel import cache
 from panel.common import (page, PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, is_owner, last_monitor_run,
                           pillar_badge)
-from xcp import config, db, gh, ideas, showcase, xtext
+from xcp import config, db, gh, ideas, xtext
 from xcp.agents import monitor
 from xcp.timeutil import aware, fmt_ago, fmt_ny, now_ny, parse_iso, today_ny, utcnow
 
@@ -432,22 +433,22 @@ def _hm(td: timedelta) -> str:
     return f"{h}h {m:02d}m" if h < 24 else f"{h // 24}d {h % 24}h"
 
 
-def slot_header(o: dict, n: int, first_up: bool, now) -> None:
+def slot_header(o: dict, n: int, first_up: bool, now, sc: dict | None = None) -> None:
     t = o["post_at"]
     hh, ampm = t.strftime("%I:%M").lstrip("0"), t.strftime("%p")
     day = ("Today" if t.date() == now.date() else "Tomorrow" if t.date() == (now + timedelta(days=1)).date()
            else "Yesterday" if t.date() == (now - timedelta(days=1)).date() else t.strftime("%A"))
     right = []
-    if o["passed"]:
+    if sc and sc["phase"] in ideas.LIVE_PHASES and o["passed"]:
+        right.append(badge("post when ready" if sc["phase"] != "ready" else "post now", "hot"))
+    elif o["passed"]:
         right.append(badge("passed", "paper"))
     elif first_up:
         right.append(badge(f"up next · in {_hm(t - now)}", "hot"))
     else:
         right.append(badge(f"in {_hm(t - now)}", "tan"))
-    if o.get("panel"):
-        status = cache.get(("showcase_status", o["key"]), lambda: ideas.showcase_status(o), ttl=60) or "waiting"
-        right.append(badge(f"🖼 {showcase.title(o['panel'])} · {status}",
-                           "olive" if status in ("ready", "posted") else "ink"))
+    if sc:
+        right.append(badge(f"🖼 {sc['title']} · {SC_PHASE[sc['phase']][1].lower()}", SC_PHASE[sc["phase"]][2]))
     lane = "BTC lane · digital credit, stablecoins, legislation, bitcoin, macro" if o["lane"] == "btc" else "AI lane"
     run = f" · desk picks land at {o['run_at']}" if o.get("run_at") and not o["passed"] else ""
     cls = "xcp-slot" + (" next" if first_up else "") + (" past" if o["passed"] else "")
@@ -455,6 +456,108 @@ def slot_header(o: dict, n: int, first_up: bool, now) -> None:
                 f'<div class="m"><div class="l">{esc_html(o["label"])} · {day}</div>'
                 f'<div class="s">{esc_html(lane)} · {n} idea{"s" if n != 1 else ""}{esc_html(run)}</div></div>'
                 f'<div class="r">{" ".join(right)}</div></div>', unsafe_allow_html=True)
+
+
+# ------------------------------------------------------------------ showcase card (Mon / Wed / Fri report panels)
+
+SC_PHASE = {  # seal, headline, header-badge tone
+    "scheduled": ("予", "Scheduled", "tan"),
+    "waiting": ("待", "Still waiting", "ink"),
+    "blocked": ("止", "Blocked", "hot"),
+    "ready": ("準", "Ready to post", "olive"),
+    "posted": ("済", "Posted", "paper"),
+    "missed": ("逃", "Missed", "paper"),
+}
+
+
+def _clock(at) -> str:
+    return fmt_ny(at if isinstance(at, datetime) else parse_iso(at), "%I:%M %p").lstrip("0")
+
+
+def _post_phrase(post: str) -> str:
+    if re.fullmatch(r"\d{1,2}:\d{2}", post):
+        return "at " + datetime.strptime(post, "%H:%M").strftime("%I:%M %p").lstrip("0")
+    return post or "when it's ready"
+
+
+def _sc_lines(sc: dict, now) -> tuple[str, str]:
+    start, deadline, checked = parse_iso(sc["start"]), parse_iso(sc["deadline"]), parse_iso(sc["checked"])
+    why = "; ".join(sc["blockers"])[:260]
+    a = sc["audit"] or {}
+    audit = (f"audit {a.get('PASS', 0)} pass · {a.get('WARN', 0)} warn · {a.get('FAIL', 0)} fail" if a else "")
+    tries = f"{sc['attempts']} check{'s' if sc['attempts'] != 1 else ''} · {sc['renders']} render{'s' if sc['renders'] != 1 else ''}"
+    ph = sc["phase"]
+    if ph == "scheduled":
+        return (f"The watcher starts checking at {_clock(start)} ET, in {_hm(start - now)}. It posts "
+                f"{_post_phrase(sc['post'])}.", "Discord pings you the moment it passes its audit.")
+    if ph == "waiting":
+        if sc["run_id"] is None:
+            main = f"The window opened at {_clock(start)}. The watcher hasn't checked in yet."
+        else:
+            main = (why[0].upper() + why[1:] + ".") if why else "Checking the panel's data. Not ready yet."
+        return main, f"Last check {fmt_ago(checked) if checked else '—'} · {tries} · gives up at {_clock(deadline)} ET"
+    if ph == "blocked":
+        return (f"The audit found a problem: {why or 'see Control Room → Showcase'}.",
+                f"Still retrying until {_clock(deadline)} ET · {tries} · backup drafts are in the Feed")
+    if ph == "ready":
+        return ("Passed its audit. The image and caption are waiting for you in the Feed.",
+                " · ".join(x for x in (f"Ready since {_clock(sc['ready_at'])}" if sc["ready_at"] else "", audit,
+                                       f"{len(sc['warnings'])} note{'s' if len(sc['warnings']) != 1 else ''} to read"
+                                       if sc["warnings"] else "") if x))
+    if ph == "posted":
+        return ("Marked posted in the Feed.", " · ".join(x for x in (
+            f"Ready at {_clock(sc['ready_at'])}" if sc["ready_at"] else "", audit) if x))
+    return (f"Not ready by {_clock(deadline)} ET." + (f" Last problem: {why}." if why else ""),
+            "Backup drafts are in the Feed. Control Room → Showcase can re-check or use the last render anyway.")
+
+
+def _sc_recheck(o: dict) -> None:
+    ok, why = gh.dispatch("showcase.yml", {"mode": "once", "panel": o["panel"]})
+    cache.bust("sc_state")
+    st.toast("Re-check started in the cloud. The card updates in a minute or two." if ok
+             else f"Couldn't start it: {why}", icon="🛰️" if ok else "⚠️")
+
+
+def showcase_card(o: dict, sc: dict, now) -> None:
+    """The report panel this slot posts: a seal that says waiting / ready / posted at a glance, why, and the image."""
+    ph = sc["phase"]
+    seal, head, _ = SC_PHASE[ph]
+    start, nudge, deadline = parse_iso(sc["start"]), parse_iso(sc["nudge"]), parse_iso(sc["deadline"])
+    span = max(1.0, (deadline - start).total_seconds())
+    at = parse_iso(sc["ready_at"]) if ph in ("ready", "posted") and sc["ready_at"] else now
+    pct = min(100.0, max(0.0, (at - start).total_seconds() / span * 100))
+    tick = min(100.0, max(0.0, (nudge - start).total_seconds() / span * 100))
+    main, sub = _sc_lines(sc, now)
+    warn = (f"⚠ No check for {_hm(now - (parse_iso(sc['checked']) or start))}. The watcher may not be running"
+            + (": press Re-check now." if owner and gh.can_dispatch() else ".")) if sc["quiet"] else ""
+    day = parse_iso(sc["start"]).strftime("%A")
+    with st.container(key=f"sc_{ph}_{_safe(o['key'])}"):
+        png = (cache.get(("sc_png", sc["run_id"], sc["png_sha"]), lambda: ideas.showcase_png(sc["run_id"]), ttl=3600)
+               if sc["run_id"] and sc["png_sha"] and ph != "scheduled" else None)
+        body, pic = st.columns([2.3, 1], vertical_alignment="center") if png else (st.container(), None)
+        with body:
+            st.markdown(
+                f'<div class="xcp-sc {ph}"><div class="seal"><b>{seal}</b></div><div class="b">'
+                f'<div class="k">Digital Credit Report · {day} showcase</div>'
+                f'<div class="ttl">{esc_html(sc["title"])}</div>'
+                f'<div class="st"><i></i>{esc_html(head)}</div>'
+                f'<div class="d">{esc_html(main)}</div><div class="d2">{esc_html(sub)}</div>'
+                + (f'<div class="warn">{esc_html(warn)}</div>' if warn else "") +
+                f'<div class="tl"><span style="width:{pct:.1f}%"></span><em style="left:{tick:.1f}%"></em></div>'
+                f'<div class="tll"><span>opens {_clock(start)}</span><span>nudge {_clock(nudge)}</span>'
+                f'<span>deadline {_clock(deadline)} ET</span></div></div></div>', unsafe_allow_html=True)
+            with st.container(horizontal=True, gap="small"):
+                if ph in ("ready", "blocked", "missed"):
+                    if st.button("📜 Post it from the Feed" if ph == "ready" else "📜 Backup drafts in the Feed",
+                                 key=f"scf_{_safe(o['key'])}", type="primary" if ph == "ready" else "secondary"):
+                        st.switch_page("views/feed.py")
+                st.link_button("View the live panel ↗", sc["url"])
+                if owner and gh.can_dispatch() and ph in ("waiting", "blocked", "missed") and o["date"] == now.date().isoformat():
+                    st.button("🔄 Re-check now", key=f"scr_{_safe(o['key'])}", on_click=_sc_recheck, args=(o,),
+                              help="One render + audit in the cloud now; drafts the post if it passes")
+        if pic is not None:
+            with pic:
+                st.image(png, width="stretch")
 
 
 # ------------------------------------------------------------------ live wire cards (raw stories)
@@ -557,11 +660,17 @@ if view == VIEWS[0]:
         return (not cats or _cat(x["pillar"]) in cats) and (not pri_only or x["hot"] or bool(x.get("priority")))
 
     shown = 0
-    for o in occs:
+    sc_states = {o["key"]: cache.get(("sc_state", o["key"]), lambda o=o: ideas.showcase_state(o), ttl=60)
+                 for o in occs if o.get("panel")}
+    live_sc = [o for o in occs if o["passed"] and (sc_states.get(o["key"]) or {}).get("phase") in ideas.LIVE_PHASES]
+    for o in live_sc + [o for o in occs if o not in live_sc]:  # a report panel still due goes first, past its slot time
         items = [x for x in groups.get(o["key"], []) if keep(x)]
-        if o["passed"] and not items:
+        sc = sc_states.get(o["key"])
+        if o["passed"] and not items and o not in live_sc:
             continue
-        slot_header(o, len(items), o is nxt, now)
+        slot_header(o, len(items), o is nxt, now, sc)
+        if sc:
+            showcase_card(o, sc, now)
         if not items:
             st.caption("Nothing here yet. It fills as news breaks; the desk adds researched picks at "
                        f"{o.get('run_at') or 'the slot run'}.")

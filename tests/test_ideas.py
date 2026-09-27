@@ -150,6 +150,54 @@ class Alerts(Base):
         self.assertFalse(notify.allowed("desk"))
 
 
+class ShowcaseState(Base):
+    OCC = {"panel": "monday", "date": "2026-09-28", "slot": "premarket"}  # the Accretion Ledger, window 7:40-11:30
+
+    def setUp(self):
+        super().setUp()
+        with db.session() as s:
+            s.query(db.ShowcaseRun).delete()
+            s.commit()
+
+    def _run(self, status, checked, **kw):
+        with db.session() as s:
+            s.add(db.ShowcaseRun(run_date="2026-09-28", panel="monday", slot="premarket", title="The Accretion Ledger",
+                                 status=status, updated_at=checked.astimezone(timezone.utc), **kw))
+            s.commit()
+
+    def at(self, hh, mm):
+        return datetime(2026, 9, 28, hh, mm, tzinfo=NY)
+
+    def test_before_the_window_it_is_scheduled_not_waiting(self):
+        sc = ideas.showcase_state(self.OCC, self.at(7, 0))
+        self.assertEqual((sc["phase"], sc["title"], sc["quiet"]), ("scheduled", "The Accretion Ledger", False))
+
+    def test_window_open_but_no_check_yet(self):
+        self.assertEqual(ideas.showcase_state(self.OCC, self.at(7, 50))["phase"], "waiting")
+        self.assertFalse(ideas.showcase_state(self.OCC, self.at(7, 50))["quiet"])
+        self.assertTrue(ideas.showcase_state(self.OCC, self.at(8, 10))["quiet"])  # 30 min in, the watcher never showed
+
+    def test_waiting_says_why_and_notices_a_silent_watcher(self):
+        self._run("waiting", self.at(8, 8), attempts=12,
+                  blockers=[{"id": "pregate", "status": "WAIT", "detail": "waiting for this week's 8-K: Strive"}])
+        sc = ideas.showcase_state(self.OCC, self.at(8, 10))
+        self.assertEqual((sc["phase"], sc["blockers"], sc["attempts"], sc["quiet"]),
+                         ("waiting", ["waiting for this week's 8-K: Strive"], 12, False))
+        self.assertTrue(ideas.showcase_state(self.OCC, self.at(8, 40))["quiet"])
+
+    def test_ready_and_posted(self):
+        self._run("ready", self.at(8, 14), ready_at=self.at(8, 14).astimezone(timezone.utc),
+                  audit_summary={"PASS": 41, "WARN": 2, "FAIL": 0})
+        sc = ideas.showcase_state(self.OCC, self.at(12, 0))  # past the deadline: still ready until you post it
+        self.assertEqual((sc["phase"], sc["audit"]["PASS"]), ("ready", 41))
+        self.assertIn(sc["phase"], ideas.LIVE_PHASES)
+
+    def test_a_run_left_waiting_after_the_deadline_is_missed(self):
+        self._run("waiting", self.at(9, 0))
+        self.assertEqual(ideas.showcase_state(self.OCC, self.at(11, 45))["phase"], "missed")
+        self.assertIsNone(ideas.showcase_state({"panel": None, "date": "2026-09-29"}))
+
+
 class SettingsCache(Base):
     def test_saving_settings_is_seen_immediately(self):
         self.assertEqual(config.settings()["alerts"]["discord"], ["showcase_ready", "test"])
