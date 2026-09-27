@@ -637,8 +637,7 @@ upcoming = [o for o in occs if not o["passed"]]
 nxt = upcoming[0] if upcoming else None
 if owner:  # rides in the header next to Share when there's room (panel/scene.js docks it), else a small line here
     if last.get("at"):
-        short = (f"Last check {fmt_ago(parse_iso(last['at']))} · {last.get('news_new', 0)} new · "
-                 f"{last.get('x_new', 0)} from your 7 · {last.get('priority', 0)} flagged")
+        short = f"Checked {fmt_ago(parse_iso(last['at']))}"  # short enough for the header; hover for the counts
         full = (f"Last check {fmt_ny(parse_iso(last['at']))} ET: {last.get('news_new', 0)} new stories, "
                 f"{last.get('x_new', 0)} new posts from your accounts, {last.get('priority', 0)} flagged. Discord only "
                 f"pings when a Digital Credit Report panel goes live.")
