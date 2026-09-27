@@ -1,6 +1,7 @@
 """Shared panel helpers: boot, market strip, badges, queueing agent work."""
 from __future__ import annotations
 
+import hashlib
 import hmac
 import html
 import os
@@ -70,30 +71,74 @@ def last_monitor_run() -> dict:
     return cache.get("monitor_last_run", lambda: db.kv_get("monitor:last_run") or {}, ttl=30)
 
 
+# ------------------------------------------------------------------ owner: unlock, remembered for 30 days
+# Unlocking stores a signed cookie in this browser, so reloads and redeploys don't sign you out. The signature is
+# keyed on PANEL_PASSWORD: changing the password signs out every remembered browser; 🔒 Lock signs out this one.
+OWNER_COOKIE, OWNER_DAYS = "xcp_owner", 30
+
+
+def _sign(expires: int) -> str:
+    key = hashlib.sha256(b"xcp-owner-cookie|" + (env("PANEL_PASSWORD") or "").encode()).digest()
+    return hmac.new(key, f"owner|{expires}".encode(), hashlib.sha256).hexdigest()
+
+
+def owner_token(now: float | None = None) -> str:
+    expires = int((now or time.time()) + OWNER_DAYS * 86400)
+    return f"{expires}.{_sign(expires)}"
+
+
+def token_ok(token: str | None, now: float | None = None) -> bool:
+    exp, _, sig = (token or "").partition(".")
+    return (exp.isdigit() and int(exp) > (now or time.time()) and len(sig) == 64
+            and hmac.compare_digest(sig, _sign(int(exp))))
+
+
+def _cookie_js(value: str, max_age: int) -> None:
+    """Set (or, with max_age 0, clear) the owner cookie from the page: Streamlit can read cookies but not set them."""
+    st.html(f"""<script>document.cookie = "{OWNER_COOKIE}={value}; Max-Age={max_age}; Path=/; SameSite=Lax"
+                + (location.protocol === "https:" ? "; Secure" : "");</script>""", unsafe_allow_javascript=True)
+
+
 def is_owner() -> bool:
-    """No PANEL_PASSWORD (local dev) = full control. Otherwise visitors are read-only until unlocked."""
-    return not env("PANEL_PASSWORD") or bool(st.session_state.get("_owner"))
+    """No PANEL_PASSWORD (local dev) = full control. Otherwise visitors are read-only until unlocked (this session,
+    or this browser for 30 days)."""
+    if not env("PANEL_PASSWORD"):
+        return True
+    ss = st.session_state
+    if not ss.get("_owner") and not ss.get("_owner_cookie_checked"):
+        ss["_owner_cookie_checked"] = True
+        try:
+            ss["_owner"] = token_ok(st.context.cookies.get(OWNER_COOKIE))
+        except Exception:  # no request context (tests, scripts)
+            pass
+    return bool(ss.get("_owner"))
 
 
 def _unlock() -> None:
     entered = st.session_state.get("_pw", "")
     if entered and hmac.compare_digest(entered.encode(), (env("PANEL_PASSWORD") or "").encode()):
         st.session_state["_owner"] = True
+        st.session_state["_owner_cookie"] = owner_token()  # owner_bar writes it on this run
     else:
         time.sleep(1.5)  # slow down guessing
         st.session_state["_pw_err"] = True
     st.session_state["_pw"] = ""
 
 
+def _lock() -> None:
+    st.session_state["_owner"] = False
+    st.session_state["_owner_cookie"] = ""  # clears this browser's cookie
+
+
 def owner_bar() -> None:
     if not env("PANEL_PASSWORD"):
         return
+    if (token := st.session_state.pop("_owner_cookie", None)) is not None:
+        _cookie_js(token, OWNER_DAYS * 86400 if token else 0)
     c = st.columns([8, 1])
-    if st.session_state.get("_owner"):
-        c[0].caption("🔓 Owner mode: full control")
-        if c[1].button("🔒 Lock", width="stretch"):
-            st.session_state["_owner"] = False
-            st.rerun()
+    if is_owner():
+        c[0].caption(f"🔓 Owner mode: full control · this browser stays unlocked for {OWNER_DAYS} days")
+        c[1].button("🔒 Lock", width="stretch", on_click=_lock, help="Sign out here (and forget this browser)")
     else:
         c[0].caption("👁 View only")
         with c[1].popover("🔑 Owner", width="stretch"):
