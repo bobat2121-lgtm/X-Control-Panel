@@ -1,4 +1,4 @@
-"""Owner unlock remembered for 30 days: the signed browser token. Offline."""
+"""Owner unlock remembered for 30 days: the signed browser token, and the page handing it back. Offline."""
 from __future__ import annotations
 
 import os
@@ -38,6 +38,38 @@ class OwnerToken(unittest.TestCase):
         t = common.owner_token(NOW)
         with mock.patch.dict(os.environ, {"PANEL_PASSWORD": "a-new-password"}):
             self.assertFalse(common.token_ok(t, NOW))
+
+
+class RememberedBrowser(unittest.TestCase):
+    """The page sends the pass it saved; the server unlocks only for a valid one, and never after 🔒 Lock."""
+
+    def setUp(self):
+        for p in (mock.patch.dict(os.environ, {"PANEL_PASSWORD": "test-only-password"}),
+                  mock.patch.object(common.st, "session_state", {})):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _page_sends(self, token):
+        with mock.patch.object(common, "_owner_reader", lambda **kw: {"token": token}):
+            common.recall_owner()
+
+    def test_a_saved_pass_unlocks_after_a_reload(self):
+        self.assertFalse(common.is_owner())
+        self._page_sends(common.owner_token())
+        self.assertTrue(common.is_owner())
+
+    def test_a_forged_or_expired_pass_does_not(self):
+        exp, _, sig = common.owner_token().partition(".")
+        for bad in (None, "", f"{exp}.{'0' * 64}", common.owner_token(NOW - 40 * 86400)):
+            self._page_sends(bad)
+            self.assertFalse(common.is_owner(), bad)
+
+    def test_lock_wins_over_a_pass_sent_later(self):
+        self._page_sends(common.owner_token())
+        common._lock()
+        self._page_sends(common.owner_token())
+        self.assertFalse(common.is_owner())
+        self.assertEqual(common.st.session_state["_owner_cookie"], "")  # the browser forgets it too
 
 
 if __name__ == "__main__":

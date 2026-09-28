@@ -65,6 +65,7 @@ def boot() -> None:
     with st.container(key="xcp_world_host"):
         st.html(_cached(SCENE_PATH, lambda p: f"<script>{p.read_text(encoding='utf-8')}</script>"),
                 unsafe_allow_javascript=True)
+        recall_owner()  # hidden here with the world
 
 
 def last_monitor_run() -> dict:
@@ -72,9 +73,28 @@ def last_monitor_run() -> dict:
 
 
 # ------------------------------------------------------------------ owner: unlock, remembered for 30 days
-# Unlocking stores a signed cookie in this browser, so reloads and redeploys don't sign you out. The signature is
-# keyed on PANEL_PASSWORD: changing the password signs out every remembered browser; 🔒 Lock signs out this one.
-OWNER_COOKIE, OWNER_DAYS = "xcp_owner", 30
+# Unlocking saves a signed pass in this browser (localStorage), so reloads and redeploys don't sign you out. The
+# signature is keyed on PANEL_PASSWORD: changing the password signs out every remembered browser; 🔒 Lock signs
+# out this one. Streamlit Cloud doesn't pass cookies through to the app, so the page itself hands the saved pass
+# to the server over the app's own connection, once per page load, and the server checks it.
+OWNER_STORE, OWNER_DAYS = "xcp_owner", 30
+_OWNER_READER = "xcp_owner_reader"
+_OWNER_READ_JS = r"""
+export default function ({ setTriggerValue }) {
+  if (window.__xcpOwnerSent) return;
+  window.__xcpOwnerSent = true;
+  let pass = null;
+  try { pass = window.localStorage.getItem("xcp_owner"); } catch (e) {}
+  const old = document.cookie.match(/(?:^|;\s*)xcp_owner=([^;]+)/);   // kept in a cookie before
+  if (old) {
+    pass = pass || old[1];
+    try { window.localStorage.setItem("xcp_owner", pass); } catch (e) {}
+    document.cookie = "xcp_owner=; Max-Age=0; Path=/";
+  }
+  if (pass) setTriggerValue("token", pass);
+}
+"""
+_owner_mount = None
 
 
 def _sign(expires: int) -> str:
@@ -93,10 +113,35 @@ def token_ok(token: str | None, now: float | None = None) -> bool:
             and hmac.compare_digest(sig, _sign(int(exp))))
 
 
-def _cookie_js(value: str, max_age: int) -> None:
-    """Set (or, with max_age 0, clear) the owner cookie from the page: Streamlit can read cookies but not set them."""
-    st.html(f"""<script>document.cookie = "{OWNER_COOKIE}={value}; Max-Age={max_age}; Path=/; SameSite=Lax"
-                + (location.protocol === "https:" ? "; Secure" : "");</script>""", unsafe_allow_javascript=True)
+def _store_js(value: str) -> None:
+    """Save (or, with "", forget) the owner pass in this browser. The pass is digits, a dot and hex."""
+    act = f'localStorage.setItem("{OWNER_STORE}", "{value}")' if value else f'localStorage.removeItem("{OWNER_STORE}")'
+    st.html(f'<script>try {{ {act}; }} catch (e) {{}} document.cookie = "{OWNER_STORE}=; Max-Age=0; Path=/";</script>',
+            unsafe_allow_javascript=True)
+
+
+def _owner_reader(**kw):
+    """Mount the reader, registering it once per server runtime (a registration doesn't outlive its runtime)."""
+    global _owner_mount
+    from streamlit.components.v2.get_bidi_component_manager import get_bidi_component_manager
+
+    if _owner_mount is None or get_bidi_component_manager().get(_OWNER_READER) is None:
+        _owner_mount = st.components.v2.component(_OWNER_READER, js=_OWNER_READ_JS)
+    return _owner_mount(**kw)
+
+
+def recall_owner() -> None:
+    """Unlock this session when the page hands back a valid pass this browser saved. Runs on every run (boot)."""
+    if not env("PANEL_PASSWORD"):
+        return
+    got = _owner_reader(key=_OWNER_READER, on_token_change=_ignore)
+    token = got.get("token") if got else None
+    if token and not st.session_state.get("_owner_locked") and token_ok(token):
+        st.session_state["_owner"] = True
+
+
+def _ignore() -> None:
+    pass
 
 
 def is_owner() -> bool:
@@ -104,21 +149,15 @@ def is_owner() -> bool:
     or this browser for 30 days)."""
     if not env("PANEL_PASSWORD"):
         return True
-    ss = st.session_state
-    if not ss.get("_owner") and not ss.get("_owner_cookie_checked"):
-        ss["_owner_cookie_checked"] = True
-        try:
-            ss["_owner"] = token_ok(st.context.cookies.get(OWNER_COOKIE))
-        except Exception:  # no request context (tests, scripts)
-            pass
-    return bool(ss.get("_owner"))
+    return bool(st.session_state.get("_owner"))
 
 
 def _unlock() -> None:
     entered = st.session_state.get("_pw", "")
     if entered and hmac.compare_digest(entered.encode(), (env("PANEL_PASSWORD") or "").encode()):
         st.session_state["_owner"] = True
-        st.session_state["_owner_cookie"] = owner_token()  # owner_bar writes it on this run
+        st.session_state.pop("_owner_locked", None)
+        st.session_state["_owner_cookie"] = owner_token()  # owner_bar saves it in the browser on this run
     else:
         time.sleep(1.5)  # slow down guessing
         st.session_state["_pw_err"] = True
@@ -127,14 +166,15 @@ def _unlock() -> None:
 
 def _lock() -> None:
     st.session_state["_owner"] = False
-    st.session_state["_owner_cookie"] = ""  # clears this browser's cookie
+    st.session_state["_owner_locked"] = True  # ignore a pass the page sends from before
+    st.session_state["_owner_cookie"] = ""    # and forget this browser
 
 
 def owner_bar() -> None:
     if not env("PANEL_PASSWORD"):
         return
     if (token := st.session_state.pop("_owner_cookie", None)) is not None:
-        _cookie_js(token, OWNER_DAYS * 86400 if token else 0)
+        _store_js(token)
     c = st.columns([8, 1])
     if is_owner():
         c[0].caption(f"🔓 Owner mode: full control · this browser stays unlocked for {OWNER_DAYS} days")
