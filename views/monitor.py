@@ -7,6 +7,7 @@ the numbers and a source under every item; write next to it, or move it to the W
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import importlib
 import re
 from urllib.parse import urlparse
 
@@ -19,6 +20,9 @@ from panel.common import (page, PILLAR_GLYPHS, badge, card_key, esc_html, esc_md
 from xcp import config, db, gh, ideas, xtext
 from xcp.agents import monitor
 from xcp.timeutil import aware, fmt_ago, fmt_ny, now_ny, parse_iso, today_ny, utcnow
+
+if not hasattr(ideas, "showcase_week"):  # a redeploy can leave the old xcp.ideas in memory: load the new one
+    ideas = importlib.reload(ideas)
 
 page("MONITOR")  # this page's tab title and pixel icon (bookmarks pick them up)
 
