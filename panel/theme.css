@@ -341,7 +341,7 @@ hr { border-color: var(--gold) !important; opacity: .7; box-shadow: 0 2px 0 rgba
 
 /* Streamlit pulls every markdown block up by 1rem (to eat a paragraph's margin); plain HTML blocks have none. */
 [data-testid="stMarkdownContainer"]:has(> .xcp-poston, > .xcp-lbl, > .xcp-slot, > .xcp-news, > .xcp-idea-h, > .xcp-comp-h,
-  > .xcp-muted, > .xcp-chips, > .xcp-surf, > .xcp-sc, > .xcp-dock) { margin-bottom: 0 !important; }
+  > .xcp-muted, > .xcp-chips, > .xcp-surf, > .xcp-sc, > .xcp-dock, > .xcp-rb, > .xcp-sc-row) { margin-bottom: 0 !important; }
 .xcp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 1px 0 3px; }
 .xcp-chips .xcp-badge { margin: 0; }
 
@@ -377,6 +377,49 @@ hr { border-color: var(--gold) !important; opacity: .7; box-shadow: 0 2px 0 rgba
 .xcp-slot.past .t, .xcp-slot.past .l { color: var(--ink); }
 .xcp-slot.past .s, .xcp-slot.past .t small { color: var(--mute); }
 .xcp-slot.past .t { border-right-color: var(--wood-d); }
+
+/* ---------------------------------------------------------------- monitor: a lane's slot for the day (BTC gold, AI jade) */
+.xcp-lane { --lane: var(--lantern); box-shadow: inset 0 0 0 1px var(--lane), 4px 4px 0 var(--wood), 0 0 16px rgba(0, 0, 0, .35); }
+.xcp-lane.ai { --lane: #6FCBB0; }
+.xcp-lane .t { color: var(--lane); border-right-color: var(--lane); min-width: 3.4em; text-align: center; }
+.xcp-lane .l { color: var(--paper); }
+/* yesterday, folded away under a lane: a slim plaque that opens the grid */
+.stApp [class*="st-key-yd_btn_"] button { min-height: 32px !important; justify-content: flex-start !important; padding: 0 14px !important;
+  background: rgba(26, 20, 16, .88) !important; border: 1px solid rgba(230, 180, 34, .5) !important; border-radius: 2px !important;
+  box-shadow: 2px 3px 0 rgba(0, 0, 0, .5) !important; }
+.stApp [class*="st-key-yd_btn_"] button p { color: var(--tan2) !important; font-family: var(--crisp) !important; font-weight: 700;
+  font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+.stApp [class*="st-key-yd_btn_"] button:hover p { color: var(--paper) !important; }
+/* a report panel ready to post: one line at the top of the feed */
+.xcp-readybar { display: flex; align-items: center; gap: 12px; padding: 7px 14px; margin: 2px 0 4px; text-decoration: none !important;
+  background: linear-gradient(90deg, #2E5A28, #1E3A1A); border: 2px solid #000; border-left: 8px solid #6FCB5F; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--gold), 3px 4px 0 rgba(0, 0, 0, .5), 0 0 18px rgba(111, 203, 95, .45); cursor: pointer; }
+.xcp-readybar b { font-family: var(--jp); font-weight: 400; font-size: 18px; color: #fff; background: #6FCB5F; padding: 0 5px;
+  border: 1px solid #000; }
+.xcp-readybar span { flex: 1; font-family: var(--crisp); font-weight: 800; font-size: 15px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--paper); }
+.xcp-readybar em { font-style: normal; font-family: var(--pixel); font-size: 10px; letter-spacing: .06em; color: #B6F0A8; }
+.xcp-readybar:hover { filter: brightness(1.12); }
+[class*="st-key-sc_"] { scroll-margin-top: 84px; }
+/* a finished report panel (posted or missed): one line */
+.xcp-sc-row { display: flex; align-items: center; gap: 12px; padding: 7px 12px; margin-bottom: 8px; background: var(--lacquer);
+  border: 2px solid #000; border-left: 8px solid var(--gold); border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(230, 180, 34, .6),
+  3px 4px 0 rgba(0, 0, 0, .45); color: var(--tan2); font-family: var(--sans); font-size: 13px; }
+.xcp-sc-row.missed { border-left-color: var(--stone); }
+.xcp-sc-row .seal { font-family: var(--jp); font-weight: 400; font-size: 20px; line-height: 1; color: var(--gold); border: 2px solid var(--gold);
+  padding: 2px 4px; transform: rotate(-4deg); }
+.xcp-sc-row.missed .seal { color: var(--stone); border-color: var(--stone); }
+.xcp-sc-row .dt { font-family: var(--pixel); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--tan); white-space: nowrap; }
+.xcp-sc-row .ttl { font-family: var(--display); font-style: italic; font-weight: 900; font-size: 1.1rem; text-transform: uppercase;
+  color: var(--paper); white-space: nowrap; }
+.xcp-sc-row .st { font-family: var(--crisp); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+.xcp-sc-row.missed .st { color: var(--stone); }
+.xcp-sc-row .m { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tan); font-size: 12.5px; }
+@media (max-width: 640px) {
+  .xcp-sc-row { flex-wrap: wrap; }
+  .xcp-sc-row .m { flex-basis: 100%; white-space: normal; }
+  .xcp-readybar em { display: none; }
+}
 
 /* ---------------------------------------------------------------- monitor: showcase card (the report panel a slot posts)
    A lacquer board under the slot plaque with a hanko seal: 予 scheduled · 待 waiting · 止 blocked · 準 ready · 済 posted

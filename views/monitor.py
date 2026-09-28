@@ -1,6 +1,7 @@
-"""📡 Monitor: post ideas under the times you post, the live wire, your 7 accounts, and what you saved.
+"""📡 Monitor: post ideas in a BTC and an AI slot each day, this week's report panels, the live wire, your 7
+accounts, and what you saved.
 
-You write the posts. Ideas sit three to a row under each post time. Open one and it spans the page with the news,
+You write the posts. Ideas sit three to a row in their lane's slot (yesterday's fold away underneath). Open one and it spans the page with the news,
 the numbers and a source under every item; write next to it, or move it to the Writer tab and keep it in view.
 """
 from __future__ import annotations
@@ -14,7 +15,7 @@ from sqlalchemy import select
 
 from panel import cache
 from panel.common import (page, PILLAR_GLYPHS, badge, card_key, esc_html, esc_md, is_owner, last_monitor_run,
-                          pillar_badge)
+                          pillar_badge, section)
 from xcp import config, db, gh, ideas, xtext
 from xcp.agents import monitor
 from xcp.timeutil import aware, fmt_ago, fmt_ny, now_ny, parse_iso, today_ny, utcnow
@@ -366,7 +367,7 @@ def detail(idea: dict, where: str, occ: dict | None = None) -> None:
     """The opened idea: spans the page, the news on the left, your post on the right."""
     safe = _safe(idea["key"])
     with st.container(key=f"detail_{where}_{safe}"):
-        slot = f" · for {occ['label']} {occ['post_at'].strftime('%a %I:%M %p').replace(' 0', ' ')}" if occ else ""
+        slot = f" · {occ['label']}" if occ else ""
         with st.container(horizontal=True, vertical_alignment="center", gap=None, key=f"dtb_{where}_{safe}"):
             st.markdown(f'<span class="xcp-tb-l">IDEA · <span class="jp">案</span> — '
                         f'{esc_html(LABEL.get(idea["pillar"], idea["pillar"]))}{esc_html(slot)}</span>', unsafe_allow_html=True)
@@ -433,29 +434,37 @@ def _hm(td: timedelta) -> str:
     return f"{h}h {m:02d}m" if h < 24 else f"{h // 24}d {h % 24}h"
 
 
-def slot_header(o: dict, n: int, first_up: bool, now, sc: dict | None = None, top: bool = False) -> None:
-    t = o["post_at"]
-    hh, ampm = t.strftime("%I:%M").lstrip("0"), t.strftime("%p")
-    day = ("Today" if t.date() == now.date() else "Tomorrow" if t.date() == (now + timedelta(days=1)).date()
-           else "Yesterday" if t.date() == (now - timedelta(days=1)).date() else t.strftime("%A"))
-    right = []
-    if sc and sc["phase"] in ideas.LIVE_PHASES and o["passed"]:
-        right.append(badge("post when ready" if sc["phase"] != "ready" else "post now", "hot"))
-    elif o["passed"]:
-        right.append(badge("passed", "paper"))
-    elif first_up:
-        right.append(badge(f"up next · in {_hm(t - now)}", "hot"))
-    else:
-        right.append(badge(f"in {_hm(t - now)}", "tan"))
-    if sc:
-        right.append(badge(f"🖼 {sc['title']} · {SC_PHASE[sc['phase']][1].lower()}", SC_PHASE[sc["phase"]][2]))
-    lane = "BTC lane · digital credit, stablecoins, legislation, bitcoin, macro" if o["lane"] == "btc" else "AI lane"
-    run = f" · desk picks land at {o['run_at']}" if o.get("run_at") and not o["passed"] else ""
-    cls = "xcp-slot" + (" next" if first_up else "") + (" past" if o["passed"] else "") + (" first" if top else "")
-    st.markdown(f'<div class="{cls}"><div class="t">{hh}<small>{ampm}</small></div>'
-                f'<div class="m"><div class="l">{esc_html(o["label"])} · {day}</div>'
-                f'<div class="s">{esc_html(lane)} · {n} idea{"s" if n != 1 else ""}{esc_html(run)}</div></div>'
+LANE_TOPICS = {"btc": "digital credit · stablecoins · AI × stablecoins · legislation · bitcoin · macro",
+               "ai": "AI models · benchmarks · physical AI & robots"}
+
+
+def lane_header(lane: str, n: int, runs: list[dict], now, top: bool = False) -> None:
+    """A lane's slot for the day: which lane, how many ideas, and which of today's desk runs have filed picks."""
+    right = [badge(f"{n} idea{'s' if n != 1 else ''}", "tan")]
+    for r in runs:
+        t = r["at"].strftime("%I:%M").lstrip("0")
+        right.append(badge(*{"picks": (f"desk {t} ✓ {r['picks']}", "olive"), "upcoming": (f"desk {t}", "paper"),
+                              "due": (f"desk {t} · running", "ink"), "empty": (f"desk {t} · no picks", "paper"),
+                              "missed": (f"desk {t} · didn't run", "hot")}[r["state"]]))
+    if not runs:
+        right.append(badge("no desk runs today", "paper"))
+    hours = ideas.TODAY_HOURS[lane]
+    st.markdown(f'<div class="xcp-slot xcp-lane {lane}{" first" if top else ""}"><div class="t">{ideas.LANES[lane]}</div>'
+                f'<div class="m"><div class="l">Today · {now:%a %b} {now.day}</div>'
+                f'<div class="s">{esc_html(LANE_TOPICS[lane])} · last {hours} hours</div></div>'
                 f'<div class="r">{" ".join(right)}</div></div>', unsafe_allow_html=True)
+
+
+def _yday(lane: str) -> None:
+    st.session_state[f"yd_{lane}"] = not st.session_state.get(f"yd_{lane}", False)
+
+
+def paged(items: list[dict], occ: dict, what: str) -> None:
+    n = st.session_state.get(f"more_{occ['key']}", PAGE)
+    grid(items[:n], "feed", occ)
+    if len(items) > n:
+        st.button(f"▾ Show {min(PAGE, len(items) - n)} more · {len(items) - n} left {what}",
+                  key=f"more_btn_{occ['key']}", on_click=_more, args=(occ["key"],), width="stretch")
 
 
 # ------------------------------------------------------------------ showcase card (Mon / Wed / Fri report panels)
@@ -507,6 +516,9 @@ def _sc_lines(sc: dict, now) -> tuple[str, str]:
     if ph == "posted":
         return ("Marked posted in the Feed.", " · ".join(x for x in (
             f"Ready at {_clock(sc['ready_at'])}" if sc["ready_at"] else "", audit) if x))
+    if sc["run_id"] is None:  # no check at all inside the window
+        return (f"The watcher never ran before the {_clock(deadline)} ET deadline: GitHub's scheduler started it too late.",
+                "Re-check now renders and audits it anyway; backup drafts are in the Feed.")
     return (f"Not ready by {_clock(deadline)} ET." + (f" Last problem: {why}." if why else ""),
             "Backup drafts are in the Feed. Control Room → Showcase can re-check or use the last render anyway.")
 
@@ -530,7 +542,8 @@ def showcase_card(o: dict, sc: dict, now) -> None:
     main, sub = _sc_lines(sc, now)
     warn = (f"⚠ No check for {_hm(now - (parse_iso(sc['checked']) or start))}. The watcher may not be running"
             + (": press Re-check now." if owner and gh.can_dispatch() else ".")) if sc["quiet"] else ""
-    day = parse_iso(sc["start"]).strftime("%A")
+    d0 = parse_iso(sc["start"])
+    day = f"{d0:%A %b} {d0.day}"
     with st.container(key=f"sc_{ph}_{_safe(o['key'])}"):
         png = (cache.get(("sc_png", sc["run_id"], sc["png_sha"]), lambda: ideas.showcase_png(sc["run_id"]), ttl=3600)
                if sc["run_id"] and sc["png_sha"] and ph != "scheduled" else None)
@@ -538,7 +551,7 @@ def showcase_card(o: dict, sc: dict, now) -> None:
         with body:
             st.markdown(
                 f'<div class="xcp-sc {ph}"><div class="seal"><b>{seal}</b></div><div class="b">'
-                f'<div class="k">Digital Credit Report · {day} showcase</div>'
+                f'<div class="k" id="sc-{_safe(o["key"])}">Digital Credit Report · {day}</div>'
                 f'<div class="ttl">{esc_html(sc["title"])}</div>'
                 f'<div class="st"><i></i>{esc_html(head)}</div>'
                 f'<div class="d">{esc_html(main)}</div><div class="d2">{esc_html(sub)}</div>'
@@ -558,6 +571,24 @@ def showcase_card(o: dict, sc: dict, now) -> None:
         if pic is not None:
             with pic:
                 st.image(png, width="stretch")
+
+
+def showcase_row(o: dict, sc: dict, now) -> None:
+    """A finished panel (posted or missed): one line."""
+    seal, head, _ = SC_PHASE[sc["phase"]]
+    d = parse_iso(sc["start"])
+    main, sub = _sc_lines(sc, now)
+    st.markdown(f'<div class="xcp-sc-row {sc["phase"]}"><b class="seal">{seal}</b><span class="dt">{d:%a %b} {d.day}</span>'
+                f'<span class="ttl">{esc_html(sc["title"])}</span><span class="st">{esc_html(head)}</span>'
+                f'<span class="m">{esc_html(sub or main)}</span></div>', unsafe_allow_html=True)
+
+
+def ready_bar(o: dict, sc: dict) -> None:
+    """A panel that's ready to post: one line at the top of the feed that jumps to its card."""
+    since = f" · since {_clock(sc['ready_at'])}" if sc["ready_at"] else ""
+    st.markdown(f'<div class="xcp-rb"><a class="xcp-readybar" href="#sc-{_safe(o["key"])}"><b>準</b><span>'
+                f'{esc_html(sc["title"])} is ready to post{esc_html(since)}</span><em>Jump to it ↓</em></a></div>',
+                unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------ live wire cards (raw stories)
@@ -628,13 +659,10 @@ st.session_state.setdefault("mon_view", VIEWS[0])
 
 now = now_ny()
 last = last_monitor_run()
-occs = ideas.occurrences(now)
 stories72 = _stream(72)
 INDEX = cache.get("event_index", ideas.load_event_index, ttl=600, wait=False)  # 14 days of headlines
-groups = ideas.assign(stories72, _briefs(), occs, now, INDEX)
+groups = ideas.assign(stories72, _briefs(), now, INDEX)
 POOL = [x for L in groups.values() for x in L]  # for "More on this" under an opened idea
-upcoming = [o for o in occs if not o["passed"]]
-nxt = upcoming[0] if upcoming else None
 if owner:  # rides in the header next to Share when there's room (panel/scene.js docks it), else a small line here
     if last.get("at"):
         short = f"Checked {fmt_ago(parse_iso(last['at']))}"  # short enough for the header; hover for the counts
@@ -664,32 +692,46 @@ if view == VIEWS[0]:
     def keep(x: dict) -> bool:
         return (not cats or _cat(x["pillar"]) in cats) and (not pri_only or x["hot"] or bool(x.get("priority")))
 
+    week = ideas.showcase_week(now)
+    sc_states = {o["key"]: cache.get(("sc_state", o["key"]), lambda o=o: ideas.showcase_state(o), ttl=60) for o in week}
+    for o in week:  # a panel waiting on you: one line up top that jumps to it
+        if (sc_states.get(o["key"]) or {}).get("phase") == "ready":
+            ready_bar(o, sc_states[o["key"]])
+
+    ran = cache.get(("jobs_run", now.date().isoformat()), lambda: ideas.jobs_run_today(now), ttl=60)
     shown = 0
-    sc_states = {o["key"]: cache.get(("sc_state", o["key"]), lambda o=o: ideas.showcase_state(o), ttl=60)
-                 for o in occs if o.get("panel")}
-    headed = False
-    live_sc = [o for o in occs if o["passed"] and (sc_states.get(o["key"]) or {}).get("phase") in ideas.LIVE_PHASES]
-    for o in live_sc + [o for o in occs if o not in live_sc]:  # a report panel still due goes first, past its slot time
-        items = [x for x in groups.get(o["key"], []) if keep(x)]
-        sc = sc_states.get(o["key"])
-        if o["passed"] and not items and o not in live_sc:
+    for lane, name in ideas.LANES.items():  # BTC, then AI: one slot a day each, yesterday folded away underneath
+        today = [x for x in groups.get(f"{lane}_today", []) if keep(x)]
+        yday = [x for x in groups.get(f"{lane}_yesterday", []) if keep(x)]
+        if (cats or pri_only) and not today and not yday:
             continue
-        slot_header(o, len(items), o is nxt, now, sc, top=not headed)
-        headed = True
-        if sc:
-            showcase_card(o, sc, now)
-        if not items:
-            st.caption("Nothing here yet. It fills as news breaks; the desk adds researched picks at "
-                       f"{o.get('run_at') or 'the slot run'}.")
-            continue
-        n = st.session_state.get(f"more_{o['key']}", PAGE)
-        grid(items[:n], "feed", o)
+        lane_header(lane, len(today), ideas.desk_runs(lane, now, _briefs(), ran), now, top=not shown)
         shown += 1
-        if len(items) > n:
-            st.button(f"▾ Show {min(PAGE, len(items) - n)} more · {len(items) - n} left for this slot",
-                      key=f"more_btn_{o['key']}", on_click=_more, args=(o["key"],), width="stretch")
+        if today:
+            paged(today, {"key": f"{lane}_today", "label": f"{name} · today"}, "today")
+        else:
+            st.caption(f"Nothing from the last {ideas.TODAY_HOURS[lane]} hours yet. It fills as news breaks and the "
+                       "desk files its picks.")
+        if yday:
+            is_open = st.session_state.get(f"yd_{lane}", False)
+            st.button(f"{'▾' if is_open else '▸'} Yesterday · {len(yday)} idea{'s' if len(yday) != 1 else ''}",
+                      key=f"yd_btn_{lane}", on_click=_yday, args=(lane,), width="stretch",
+                      help=f"{name} ideas from the {ideas.YESTERDAY_HOURS} hours before today's window")
+            if is_open:
+                paged(yday, {"key": f"{lane}_yesterday", "label": f"{name} · yesterday"}, "from yesterday")
     if not shown and (cats or pri_only):
         st.info("No ideas match these filters right now.", icon="🗞")
+
+    if week:  # the report panels: a slot each, under the news
+        section("Report panels", "this week · Digital Credit Report")
+        for o in week:
+            sc = sc_states.get(o["key"])
+            if not sc:
+                continue
+            if sc["phase"] == "posted" or (sc["phase"] == "missed" and o["date"] < now.date().isoformat()):
+                showcase_row(o, sc, now)  # done with: one line (today's miss keeps its card: re-check, backups)
+            else:
+                showcase_card(o, sc, now)
 
 # ------------------------------------------------------------------ ✍️ writer
 elif view == VIEWS[1]:

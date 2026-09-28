@@ -1,9 +1,9 @@
-"""Post ideas, grouped under the slot times you post at (the Monitor page's idea feed).
+"""Post ideas in one slot a day per lane (the Monitor page's idea feed), plus this week's report panels.
 
-An idea is either a desk brief (researched at the slot's run time) or a live story from the monitor. Briefs sit
-under the slot they were written for. A live story goes to the next upcoming slot in its lane (the AI lane goes to
-the AI slot, everything else to the next BTC slot), and drops out once a brief already covers it.
-Ideas are plain dicts (JSON-safe) so the Writer tab can pin them.
+BTC and AI each get a rolling "today" (an idea stays while its latest coverage is under 24 hours old, 36 for AI) and
+a collapsed "yesterday" behind it (the 24 hours after that). Desk picks from any of the day's runs sit in their lane;
+a live story goes to its pillar's lane and drops out once a desk pick already covers it. The Mon / Wed / Fri Digital
+Credit Report panels are slots of their own. Ideas are plain dicts (JSON-safe) so the Writer tab can pin them.
 """
 from __future__ import annotations
 
@@ -16,50 +16,70 @@ from xcp import config, db, showcase
 from xcp.sources import digital_exposure as de
 from xcp.timeutil import at_ny, aware, days_match, now_ny, parse_iso, utcnow
 
-HORIZON_HOURS = 36  # upcoming slots shown ahead, plus the next slot of every lane however far away
-MIN_WINDOW_HOURS = {"btc": 24, "ai": 36}  # a live story is an idea for at least this long
+LANES = {"btc": "BTC", "ai": "AI"}  # page order
+TODAY_HOURS = {"btc": 24, "ai": 36}  # rolling "today": an idea stays this long after its latest coverage
+YESTERDAY_HOURS = 24  # then this much longer in the collapsed "yesterday" under its lane
 PRIORITY_LABEL = {3: "post now", 2: "today", 1: "worth knowing"}
 
 
-def occurrences(now: datetime | None = None) -> list[dict]:
-    """Slots coming up in the next 36 hours plus the next slot of every lane (soonest first), then the slots of the
-    last 36 hours (latest first; the page shows those only when they hold desk picks)."""
+def day_of(lane: str, at: datetime | None, now: datetime) -> str | None:
+    """'today', 'yesterday' or None (too old) for an idea whose latest coverage is `at`."""
+    if at is None:
+        return None
+    age = now - at
+    if age < timedelta(hours=TODAY_HOURS[lane]):
+        return "today"
+    if age < timedelta(hours=TODAY_HOURS[lane] + YESTERDAY_HOURS):
+        return "yesterday"
+    return None
+
+
+DESK_GRACE = timedelta(minutes=100)  # xcp/scheduler.py WINDOW_AFTER: a late-starting desk run still counts until then
+
+
+def jobs_run_today(now: datetime | None = None) -> set[str]:
+    """Names of the jobs that started today (New York date), whatever came of them."""
+    d = (now or now_ny()).date().isoformat()
+    with db.session() as s:
+        return set(s.scalars(select(db.Run.job).where(db.Run.run_date == d).distinct()).all())
+
+
+def desk_runs(lane: str, now: datetime | None = None, briefs: list[dict] | None = None,
+              ran: set[str] | None = None) -> list[dict]:
+    """Today's desk runs in a lane (soonest first). state: upcoming | due (its window is open) | picks (filed some)
+    | empty (ran, no picks) | missed (never started: GitHub's cron was late past the window)."""
     now = now or now_ny()
-    slots = config.settings().get("slots", {})
-    seen, out = set(), []
+    d = now.date()
+    out = []
+    for name, spec in config.settings().get("slots", {}).items():
+        if spec.get("lane", "btc") != lane or not spec.get("run_at") or not days_match(spec.get("days"), d):
+            continue
+        at = at_ny(d, spec["run_at"])
+        picks = sum(1 for b in briefs or [] if b.get("run_slot") == name and b.get("run_date") == d.isoformat())
+        if picks:
+            state = "picks"
+        elif at > now:
+            state = "upcoming"
+        elif name in (ran or set()):
+            state = "empty"
+        else:
+            state = "due" if now <= at + DESK_GRACE else "missed"
+        out.append({"slot": name, "at": at, "done": at <= now, "picks": picks, "state": state})
+    return sorted(out, key=lambda r: r["at"])
 
-    def add(d, name, spec):
-        k = f"{d.isoformat()}_{name}"
-        if k in seen:
-            return
-        seen.add(k)
-        post = at_ny(d, spec["post_at"])
-        panel = showcase.panel_for(d) if name in showcase.showcase_slots(d) else None
-        out.append({"key": k, "slot": name, "date": d.isoformat(), "post_at": post, "run_at": spec.get("run_at", ""),
-                    "label": spec.get("label", name), "lane": spec.get("lane", "btc"), "passed": post <= now,
-                    "panel": panel})
 
-    for i in range(-2, 3):
-        d = (now + timedelta(days=i)).date()
-        for name, spec in slots.items():
-            if not days_match(spec.get("days"), d) or not spec.get("post_at"):
-                continue
-            post = at_ny(d, spec["post_at"])
-            if now - timedelta(hours=HORIZON_HOURS) <= post <= now + timedelta(hours=HORIZON_HOURS):
-                add(d, name, spec)
-    for lane in {s.get("lane", "btc") for s in slots.values()}:  # e.g. Friday night → Monday's pre-market
-        if not any(o["lane"] == lane and not o["passed"] for o in out):
-            for i in range(8):
-                d = (now + timedelta(days=i)).date()
-                nxt = sorted((at_ny(d, s["post_at"]), n, s) for n, s in slots.items()
-                             if s.get("lane", "btc") == lane and s.get("post_at") and days_match(s.get("days"), d)
-                             and at_ny(d, s["post_at"]) > now)
-                if nxt:
-                    add(d, nxt[0][1], nxt[0][2])
-                    break
-    upcoming = sorted((o for o in out if not o["passed"]), key=lambda o: o["post_at"])
-    passed = sorted((o for o in out if o["passed"]), key=lambda o: o["post_at"], reverse=True)
-    return upcoming + passed
+def showcase_week(now: datetime | None = None) -> list[dict]:
+    """This week's report panels, one slot each: Mon (Tuesday after an EDGAR Monday holiday), Wed, Fri. From
+    Saturday on, next week's."""
+    now = now or now_ny()
+    start = now.date() - timedelta(days=now.weekday()) + timedelta(days=7 if now.weekday() >= 5 else 0)
+    out = []
+    for i in range(7):
+        d = start + timedelta(days=i)
+        if panel := showcase.panel_for(d):
+            out.append({"key": f"{d.isoformat()}_{panel}", "panel": panel, "date": d.isoformat(),
+                        "slot": showcase.panels().get(panel, {}).get("slot", "")})
+    return out
 
 
 # ------------------------------------------------------------------ building ideas
@@ -262,29 +282,20 @@ def load_briefs(since_hours: int = 60, statuses_out: tuple[str, ...] = ("dismiss
     return [from_brief(b, items) for b in rows]
 
 
-def assign(stories: list[dict], briefs: list[dict], occs: list[dict], now: datetime | None = None,
+def assign(stories: list[dict], briefs: list[dict], now: datetime | None = None,
            index: EventIndex | None = None) -> dict[str, list]:
-    """occurrence key -> ideas, best first (desk picks, then priority stories, then by score). With an index, every
-    idea is stamped with when its event first surfaced."""
+    """'btc_today' / 'btc_yesterday' / 'ai_today' / 'ai_yesterday' -> ideas, best first (desk picks, then priority
+    stories, then by score). With an index, every idea is stamped with when its event first surfaced."""
     now = now or now_ny()
-    out: dict[str, list] = {o["key"]: [] for o in occs}
-    covered: set[str] = set()
+    out: dict[str, list] = {f"{lane}_{day}": [] for lane in LANES for day in ("today", "yesterday")}
     slots = config.settings().get("slots", {})
-    for b in briefs:
-        if b["status"] == "dismissed":  # passed on since it was loaded
-            continue
-        k = f"{b['run_date']}_{b['run_slot']}"
-        if k not in out:  # a manual run on a day that slot doesn't post: the next slot in its lane takes it
-            lane = slots.get(b["run_slot"], {}).get("lane") or config.pillar_lane(b["pillar"])
-            fresh = parse_iso(b["newest"]) > utcnow() - timedelta(hours=HORIZON_HOURS)
-            k = next((o["key"] for o in occs if not o["passed"] and o["lane"] == lane), None) if fresh else None
-        if k:
-            out[k].append(stamp(b, index))
-            covered.update(b.get("item_ids", []))
-    last_passed: dict[str, datetime] = {}
-    for o in occs:
-        if o["passed"]:
-            last_passed[o["lane"]] = max(last_passed.get(o["lane"], o["post_at"]), o["post_at"])
+    live = [b for b in briefs if b["status"] != "dismissed"]  # passed on since it was loaded
+    covered = {i for b in live for i in b.get("item_ids", [])}  # a story a desk pick covers isn't a second idea
+    for b in live:
+        lane = slots.get(b["run_slot"], {}).get("lane") or config.pillar_lane(b["pillar"])
+        day = day_of(lane, parse_iso(b["newest"]), now)
+        if day:
+            out[f"{lane}_{day}"].append(stamp(b, index))
     min_eng = int(config.settings().get("monitor", {}).get("idea_min_engagement", 100))
     for c in stories:
         if c["status"] in ("hidden", "used") or c["lead"].id in covered or any(m.id in covered for m in c["members"]):
@@ -295,21 +306,15 @@ def assign(stories: list[dict], briefs: list[dict], occs: list[dict], now: datet
             if mt.get("like_count", 0) + 2 * mt.get("retweet_count", 0) + 3 * mt.get("quote_count", 0) < min_eng:
                 continue  # a random account's post needs real traction to count as an idea (all of them stay in Live)
         lane = config.pillar_lane(c["pillar"])
-        target = next((o for o in occs if not o["passed"] and o["lane"] == lane), None)
-        if target is None:
-            continue
-        window = now - timedelta(hours=MIN_WINDOW_HOURS.get(lane, 24))
-        since = min(window, last_passed[lane]) if lane in last_passed else window
-        if c["newest"] < since:
-            continue
-        out[target["key"]].append(stamp(from_story(c), index))
-    for k, ideas in out.items():
+        day = day_of(lane, c["newest"], now)
+        if day:
+            out[f"{lane}_{day}"].append(stamp(from_story(c), index))
+    for ideas in out.values():
         ideas.sort(key=lambda x: (x["kind"] == "brief", x["hot"], x["score"]), reverse=True)
     return out
 
 
 SHOWCASE_QUIET_MINUTES = 15  # a run still waiting with no check for this long: the watcher isn't running
-LIVE_PHASES = ("waiting", "blocked", "ready")  # still needs you (or the watcher)
 
 
 def showcase_state(occ: dict, now: datetime | None = None) -> dict | None:

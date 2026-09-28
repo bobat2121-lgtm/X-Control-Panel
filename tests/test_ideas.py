@@ -14,10 +14,11 @@ os.environ["LLM_BACKEND"] = "mock"
 
 from xcp import config, db, ideas, notify  # noqa: E402
 from xcp.agents import collect, monitor  # noqa: E402
-from xcp.timeutil import NY, utcnow  # noqa: E402
+from xcp.timeutil import NY  # noqa: E402
 
 FRI_6PM = datetime(2026, 9, 25, 18, 0, tzinfo=NY)
 MON_9AM = datetime(2026, 9, 28, 9, 0, tzinfo=NY)
+SAT_10AM = datetime(2026, 9, 26, 10, 0, tzinfo=NY)
 
 
 def _item(s, iid, title, kind="news", at=MON_9AM - timedelta(minutes=30), lane="btc", pillar=None, author="Reuters",
@@ -38,54 +39,88 @@ class Base(unittest.TestCase):
         db.kv_delete("config:settings")
 
 
-class Occurrences(Base):
-    def test_friday_evening_looks_to_saturday_ai_and_monday_premarket(self):
-        occ = ideas.occurrences(FRI_6PM)
-        up = [(o["slot"], o["post_at"].strftime("%a %H:%M")) for o in occ if not o["passed"]]
-        self.assertEqual(up[0], ("ai_noon", "Sat 12:00"))
-        self.assertIn(("premarket", "Mon 08:00"), up)  # the next BTC slot, however far away
-        passed = [o["slot"] for o in occ if o["passed"]]
-        self.assertEqual(passed[0], "friday_close")  # latest first
-        mon = next(o for o in occ if o["slot"] == "premarket" and o["date"] == "2026-09-28")
-        self.assertEqual(mon["panel"], "monday")  # the Accretion Ledger rides with Monday's pre-market
+def _stream(now):
+    """The monitor's story stream as of `now` (its 72-hour window is measured from the clock)."""
+    with mock.patch.object(monitor, "utcnow", return_value=now.astimezone(timezone.utc)):
+        return monitor.stream(hours=72)
 
-    def test_weekday_morning(self):
-        up = [o["slot"] for o in ideas.occurrences(MON_9AM) if not o["passed"]]
-        self.assertEqual(up[:2], ["ai_noon", "midday"])
+
+def _brief(s, title, run_slot, run_date, at, pillar="bitcoin", priority=2, **kw):
+    s.add(db.Brief(run_slot=run_slot, run_date=run_date, title=title, pillar=pillar, priority=priority,
+                   created_at=at.astimezone(timezone.utc), sources=kw.pop("sources", []), **kw))
+
+
+class DaySlots(Base):
+    def test_todays_desk_runs_per_lane(self):
+        btc = ideas.desk_runs("btc", MON_9AM, [{"run_slot": "premarket", "run_date": "2026-09-28"}] * 2)
+        self.assertEqual([(r["at"].strftime("%H:%M"), r["done"], r["picks"]) for r in btc],
+                         [("07:05", True, 2), ("12:50", False, 0)])  # 4:10 runs on Fridays only
+        self.assertEqual([r["at"].strftime("%H:%M") for r in ideas.desk_runs("ai", MON_9AM)], ["11:20"])
+        self.assertEqual([r["at"].strftime("%H:%M") for r in ideas.desk_runs("btc", FRI_6PM)], ["07:05", "12:50", "16:10"])
+        self.assertEqual(ideas.desk_runs("btc", SAT_10AM), [])  # no BTC desk on weekends
+
+    def test_a_desk_run_github_started_too_late_says_so(self):
+        at = lambda hh, mm, ran=(): [(r["slot"], r["state"]) for r in ideas.desk_runs(  # noqa: E731
+            "btc", datetime(2026, 9, 28, hh, mm, tzinfo=NY), [], set(ran))]
+        self.assertEqual(at(13, 30), [("premarket", "missed"), ("midday", "due")])  # 12:50 still inside its window
+        self.assertEqual(at(15, 0), [("premarket", "missed"), ("midday", "missed")])
+        self.assertEqual(at(15, 0, ran=["midday"]), [("premarket", "missed"), ("midday", "empty")])
+
+    def test_report_panels_are_this_weeks_then_next_weeks_from_saturday(self):
+        week = lambda now: [(o["panel"], o["date"]) for o in ideas.showcase_week(now)]  # noqa: E731
+        self.assertEqual(week(MON_9AM), [("monday", "2026-09-28"), ("wednesday", "2026-09-30"), ("friday", "2026-10-02")])
+        self.assertEqual(week(datetime(2026, 10, 3, 10, 0, tzinfo=NY)),
+                         [("monday", "2026-10-05"), ("wednesday", "2026-10-07"), ("friday", "2026-10-09")])
+        self.assertEqual(week(datetime(2026, 9, 9, 9, 0, tzinfo=NY))[0], ("monday", "2026-09-08"))  # Labor Day week
 
 
 class Assign(Base):
-    def test_stories_go_to_the_next_slot_in_their_lane_and_briefs_absorb_their_items(self):
+    def test_lanes_desk_picks_first_and_briefs_absorb_their_items(self):
         with db.session() as s:
             _item(s, "sc", "Circle USDC supply hits a record", pillar="stablecoins")
             _item(s, "ai", "OpenAI ships a new frontier model", lane="ai", pillar="ai_models")
             _item(s, "dc", "Strategy prices a new STRC offering", pillar="digital_credit")
             _item(s, "rnd", "Random account loves AI", kind="x_post", lane="ai", pillar="ai_models", author="rando")
-            s.add(db.Brief(run_slot="midday", run_date="2026-09-28", title="STRC offering: what it funds",
-                           pillar="digital_credit", priority=3, item_ids=["dc"],
-                           sources=[{"title": "t", "url": "https://x.test/dc", "publisher": "Reuters", "kind": "news"}]))
+            _brief(s, "STRC offering: what it funds", "premarket", "2026-09-28", MON_9AM - timedelta(hours=2),
+                   pillar="digital_credit", priority=3, item_ids=["dc"],
+                   sources=[{"title": "t", "url": "https://x.test/dc", "publisher": "Reuters", "kind": "news"}])
             s.commit()
-        occ = ideas.occurrences(MON_9AM)
-        out = ideas.assign(monitor.stream(hours=72), ideas.load_briefs(since_hours=24), occ, MON_9AM)
-        ai = out["2026-09-28_ai_noon"]
-        midday = out["2026-09-28_midday"]
-        self.assertEqual([x["title"] for x in ai], ["OpenAI ships a new frontier model"])  # low-traction post dropped
-        self.assertEqual(midday[0]["kind"], "brief")  # desk picks lead
-        self.assertTrue(midday[0]["hot"])
-        titles = [x["title"] for x in midday]
+        out = ideas.assign(_stream(MON_9AM), ideas.load_briefs(since_hours=24 * 30), MON_9AM)
+        self.assertEqual([x["title"] for x in out["ai_today"]], ["OpenAI ships a new frontier model"])  # low-traction post dropped
+        btc = out["btc_today"]
+        self.assertEqual((btc[0]["kind"], btc[0]["hot"]), ("brief", True))  # desk picks lead
+        titles = [x["title"] for x in btc]
         self.assertIn("Circle USDC supply hits a record", titles)
         self.assertNotIn("Strategy prices a new STRC offering", titles)  # already inside the brief
-        self.assertEqual(midday[0]["items"][0]["url"], "https://x.test/dc")
+        self.assertEqual(btc[0]["items"][0]["url"], "https://x.test/dc")
 
-    def test_off_day_brief_goes_to_the_next_slot_in_its_lane(self):
+    def test_rolling_today_then_yesterday_then_gone(self):
         with db.session() as s:
-            s.add(db.Brief(run_slot="midday", run_date="2026-09-26", title="Saturday manual run", pillar="bitcoin",
-                           priority=2, sources=[]))
+            _item(s, "b30", "Senate schedules stablecoin markup vote", at=MON_9AM - timedelta(hours=30), pillar="legislation")
+            _item(s, "b50", "Treasury yields climb after jobs report", at=MON_9AM - timedelta(hours=50), pillar="macro")
+            _item(s, "a30", "Figure unveils a humanoid for warehouses", at=MON_9AM - timedelta(hours=30), lane="ai",
+                  pillar="physical_ai")
+            _item(s, "a40", "Anthropic publishes new benchmark results", at=MON_9AM - timedelta(hours=40), lane="ai",
+                  pillar="ai_benchmarks")
             s.commit()
-        occ = ideas.occurrences(datetime(2026, 9, 26, 15, 0, tzinfo=NY))
-        with mock.patch.object(ideas, "utcnow", return_value=utcnow()):
-            out = ideas.assign([], ideas.load_briefs(since_hours=24), occ, datetime(2026, 9, 26, 15, 0, tzinfo=NY))
-        self.assertEqual([x["title"] for x in out["2026-09-28_premarket"]], ["Saturday manual run"])
+        out = {k: [x["title"] for x in v] for k, v in ideas.assign(_stream(MON_9AM), [], MON_9AM).items()}
+        self.assertEqual(out["btc_today"], [])
+        self.assertEqual(out["btc_yesterday"], ["Senate schedules stablecoin markup vote"])  # 24-48 hours
+        self.assertEqual(out["ai_today"], ["Figure unveils a humanoid for warehouses"])  # AI's today is 36 hours
+        self.assertEqual(out["ai_yesterday"], ["Anthropic publishes new benchmark results"])
+        self.assertNotIn("Treasury yields climb after jobs report", sum(out.values(), []))  # over 48 hours: gone
+
+    def test_friday_afternoon_picks_are_still_today_on_saturday_morning(self):
+        with db.session() as s:
+            _brief(s, "What Friday's close says about STRC", "friday_close", "2026-09-25",
+                   datetime(2026, 9, 25, 16, 15, tzinfo=NY), pillar="digital_credit")
+            s.commit()
+        briefs = ideas.load_briefs(since_hours=24 * 30)
+        titles = lambda now, k: [x["title"] for x in ideas.assign([], briefs, now)[k]]  # noqa: E731
+        self.assertEqual(titles(SAT_10AM, "btc_today"), ["What Friday's close says about STRC"])
+        self.assertEqual(titles(datetime(2026, 9, 27, 10, 0, tzinfo=NY), "btc_yesterday"),
+                         ["What Friday's close says about STRC"])
+        self.assertEqual(titles(datetime(2026, 9, 27, 18, 0, tzinfo=NY), "btc_yesterday"), [])
 
     def test_related_finds_the_same_story_in_other_words(self):
         a = {"key": "a", "title": "Circle and Tether freeze Bitget hack funds", "newest": "1"}
@@ -190,7 +225,6 @@ class ShowcaseState(Base):
                   audit_summary={"PASS": 41, "WARN": 2, "FAIL": 0})
         sc = ideas.showcase_state(self.OCC, self.at(12, 0))  # past the deadline: still ready until you post it
         self.assertEqual((sc["phase"], sc["audit"]["PASS"]), ("ready", 41))
-        self.assertIn(sc["phase"], ideas.LIVE_PHASES)
 
     def test_a_run_left_waiting_after_the_deadline_is_missed(self):
         self._run("waiting", self.at(9, 0))

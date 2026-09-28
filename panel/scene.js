@@ -816,6 +816,15 @@
   }
   setInterval(dock, 600);
 
+  // in-page jumps (the Monitor's "ready to post" bar): scroll the report panel's card into view in Streamlit's scroller
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href^="#sc-"]');
+    const t = a && document.getElementById(a.getAttribute('href').slice(1));
+    if (!t) return;
+    e.preventDefault();
+    (t.closest('[class*="st-key-sc_"]') || t).scrollIntoView({ block: 'start' });   // instant: smooth stalls in Streamlit's scroller
+  }, true);
+
   window.__xcpWorld = {
     poke() { if (!document.body.contains(cvs)) document.body.prepend(cvs); if (!document.body.contains(btn)) document.body.appendChild(btn); },
     phase(p) { phaseOffset = p - ((Date.now() / 1000) % DAY) / DAY; world.skyKey = -1; },
