@@ -24,6 +24,12 @@ def env(name: str, default: str | None = None) -> str | None:
     return v if v not in (None, "") else default
 
 
+def live() -> bool:
+    """The master switch, off unless XCP_LIVE=1 (Streamlit secrets, Actions variables or .env). Off: no X API,
+    Codex, news or market feeds, Discord, GitHub dispatches or Postgres (Neon). README → Switched off."""
+    return env("XCP_LIVE") == "1"
+
+
 @lru_cache(maxsize=None)
 def _yaml(name: str) -> dict:
     path = CONFIG_DIR / f"{name}.yaml"

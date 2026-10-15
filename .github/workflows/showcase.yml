@@ -7,16 +7,17 @@ name: showcase
 # It has its own queue so a long Monday wait never blocks the `agent` workflow. GitHub cron can start
 # late or skip a run under load, so each window has several start times (EDT and EST hours listed);
 # extra starts exit in seconds once the panel is ready.
+# ⏸ Switched off (README → Switched off): the schedule is paused. Un-comment it to turn it back on.
 on:
-  schedule:
-    - cron: "41 11,12 * * 1,2"   # 🧾 Accretion Ledger 07:41 ET (Tue only after an EDGAR Monday holiday)
-    - cron: "23 13,14 * * 1,2"   #    backup starts 08:23-10:23 ET
-    - cron: "11 15 * * 1,2"      #    last backup 10:11-11:11 ET
-    - cron: "31 16,17 * * 3"     # 🎟 Coupon Sheet 12:31 ET
-    - cron: "3 17,18 * * 3"      #    backup 13:03 ET
-    - cron: "3 20,21 * * 5"      # 🔔 Closing Mark 16:03 ET (waits for the close to settle)
-    - cron: "37 20,21 * * 5"     #    backup 16:37 ET
-    - cron: "13 0,1 * * 1,3,5"   # 🧪 preflight Sun/Tue/Thu ~20:13 ET: will tomorrow's panel render cleanly?
+  # schedule:
+  #   - cron: "41 11,12 * * 1,2"   # 🧾 Accretion Ledger 07:41 ET (Tue only after an EDGAR Monday holiday)
+  #   - cron: "23 13,14 * * 1,2"   #    backup starts 08:23-10:23 ET
+  #   - cron: "11 15 * * 1,2"      #    last backup 10:11-11:11 ET
+  #   - cron: "31 16,17 * * 3"     # 🎟 Coupon Sheet 12:31 ET
+  #   - cron: "3 17,18 * * 3"      #    backup 13:03 ET
+  #   - cron: "3 20,21 * * 5"      # 🔔 Closing Mark 16:03 ET (waits for the close to settle)
+  #   - cron: "37 20,21 * * 5"     #    backup 16:37 ET
+  #   - cron: "13 0,1 * * 1,3,5"   # 🧪 preflight Sun/Tue/Thu ~20:13 ET: will tomorrow's panel render cleanly?
   workflow_dispatch:
     inputs:
       mode:
@@ -45,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 300
     env:
+      XCP_LIVE: ${{ vars.XCP_LIVE }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
       PANEL_URL: ${{ vars.PANEL_URL }}
@@ -57,7 +59,10 @@ jobs:
       - name: Secrets configured?
         id: cfg
         run: |
-          if [ -z "$DATABASE_URL" ]; then
+          if [ "$XCP_LIVE" != "1" ]; then
+            echo "::notice::X Control Panel is switched off (Actions variable XCP_LIVE is not 1). Skipping."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$DATABASE_URL" ]; then
             echo "::notice::DATABASE_URL secret not set yet. Skipping."
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else

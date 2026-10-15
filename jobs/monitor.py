@@ -20,6 +20,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-ping", action="store_true")
     args = ap.parse_args(argv)
 
+    from xcp import config
+
+    if not config.live():
+        print("X Control Panel is switched off (XCP_LIVE is not 1): nothing checked. README → Switched off.",
+              file=sys.stderr)
+        return 0
+
     from xcp import db
     from xcp.agents import monitor
     from xcp.timeutil import today_ny, utcnow

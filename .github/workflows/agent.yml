@@ -2,14 +2,15 @@ name: agent
 
 # GitHub cron is UTC and can start a few minutes late. Each slot has two hours
 # listed (EDT and EST); the agent itself only runs what is due in New York time.
+# ⏸ Switched off (README → Switched off): the schedule is paused. Un-comment it to turn it back on.
 on:
-  schedule:
-    - cron: "5 11,12 * * 1-5"   # ☀️ pre-market     07:05 ET (Mon-Fri)
-    - cron: "20 15,16 * * *"    # 🤖 AI ideas       11:20 ET (daily)
-    - cron: "50 16,17 * * 1-5"  # 🕜 midday         12:50 ET (Mon-Fri)
-    - cron: "10 20,21 * * 5"    # 🔔 Friday close   16:10 ET (Fri)
-    - cron: "30 1,2 * * *"      # 🌙 nightly        21:30 ET (daily)
-    - cron: "0 21,22 * * 0"     # 📅 weekly review  17:00 ET (Sun)
+  # schedule:
+  #   - cron: "5 11,12 * * 1-5"   # ☀️ pre-market     07:05 ET (Mon-Fri)
+  #   - cron: "20 15,16 * * *"    # 🤖 AI ideas       11:20 ET (daily)
+  #   - cron: "50 16,17 * * 1-5"  # 🕜 midday         12:50 ET (Mon-Fri)
+  #   - cron: "10 20,21 * * 5"    # 🔔 Friday close   16:10 ET (Fri)
+  #   - cron: "30 1,2 * * *"      # 🌙 nightly        21:30 ET (daily)
+  #   - cron: "0 21,22 * * 0"     # 📅 weekly review  17:00 ET (Sun)
   workflow_dispatch:
     inputs:
       job:
@@ -30,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      XCP_LIVE: ${{ vars.XCP_LIVE }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       LLM_BACKEND: codex
       CODEX_AUTH_FROM_DB: "1"
@@ -45,7 +47,10 @@ jobs:
       - name: Secrets configured?
         id: cfg
         run: |
-          if [ -z "$DATABASE_URL" ] || [ -z "$CODEX_AUTH_KEY" ]; then
+          if [ "$XCP_LIVE" != "1" ]; then
+            echo "::notice::X Control Panel is switched off (Actions variable XCP_LIVE is not 1). Skipping."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$DATABASE_URL" ] || [ -z "$CODEX_AUTH_KEY" ]; then
             echo "::notice::DATABASE_URL / CODEX_AUTH_KEY secrets not set yet (README step 5). Skipping."
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else

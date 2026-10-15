@@ -323,6 +323,8 @@ def engine():
     global _engine
     if _engine is None:
         url = db_url()
+        if url.startswith("postgresql") and not config.live():
+            raise RuntimeError("X Control Panel is switched off (XCP_LIVE is not 1): not connecting to Postgres")
         kwargs = {"pool_pre_ping": True}
         if url.startswith("sqlite"):
             kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}

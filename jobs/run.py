@@ -58,6 +58,13 @@ def main(argv: list[str] | None = None) -> int:
         print(Fernet.generate_key().decode())
         return 0
 
+    from xcp import config
+
+    if not config.live():
+        print("X Control Panel is switched off (XCP_LIVE is not 1): nothing run. README → Switched off.",
+              file=sys.stderr)
+        return 0
+
     from xcp import scheduler
 
     if args.cmd == "plan":

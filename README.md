@@ -1,5 +1,7 @@
 # 🛰️ X Control Panel
 
+> **⏸ Switched off.** No APIs (X, Codex, Discord, GitHub dispatches), no live feeds (news, SEC, market prices) and no database: nothing connects to Neon. The scheduled workflows are paused and the panel shows a notice instead. See [Switched off](#switched-off) to turn it back on.
+
 A news monitor and research desk for your X account (80% Bitcoin and digital credit, 20% AI). It watches your watchlist on X, crypto outlets, regulators, Google News topics and SEC filings, and pings you as stories break. At your slot times an AI desk writes briefs (what happened, why it matters, the numbers, angle questions); you write the posts. Writer mode **Drafts** (Control Room → Settings) brings back AI-written drafts when you want them.
 
 ```
@@ -41,7 +43,26 @@ A news monitor and research desk for your X account (80% Bitcoin and digital cre
 
 "Not yet" results retry every few minutes. A real problem (an image figure that disagrees with the 8-K, a FAIL) shows in Control Room → Showcase (and in Discord only if you switch on "showcase waits"). If digital-exposure's `main` stops rendering, the watcher uses the last commit that rendered cleanly and says so.
 
+## Switched off
+
+One switch, `XCP_LIVE`, turns everything on or off. It's off unless set to `1`. While it's off:
+
+- **Panel:** shows a "Switched off" notice and stops: no database connection, no price tape, no live wire, no workflow dispatches.
+- **Workflows:** the `agent`, `monitor` and `showcase` schedules are commented out, so nothing runs on its own. A manual run skips straight away.
+- **Jobs:** `python -m jobs.run …` and `python -m jobs.monitor` exit without doing anything (`gen-key` still works).
+- **Database:** the app refuses to connect to Postgres (Neon) at all, so the Neon compute stays suspended. Your data stays in Neon, untouched.
+
+To turn it back on:
+
+1. Streamlit app → Settings → Secrets: add `XCP_LIVE = "1"`.
+2. GitHub repo → Settings → Secrets and variables → Actions → **Variables**: add `XCP_LIVE` with value `1`.
+3. Un-comment the `schedule:` block in `.github/workflows/agent.yml`, `monitor.yml` and `showcase.yml`.
+
+Locally, put `XCP_LIVE=1` in `.env`.
+
 ## Try it locally (no keys needed)
+
+With `XCP_LIVE=1` in `.env`:
 
 ```powershell
 .venv\Scripts\python -m jobs.run seed-demo
