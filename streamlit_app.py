@@ -2,8 +2,13 @@ import streamlit as st
 
 st.set_page_config(page_title="X Control Panel", page_icon="panel/icons/app.png", layout="wide")
 
-from panel.common import boot, market_strip, owner_bar  # noqa: E402
+from panel.common import boot, load_secrets, market_strip, owner_bar, switched_off  # noqa: E402
+from xcp import config  # noqa: E402
 
+load_secrets()
+if not config.live():  # README → Switched off
+    switched_off()
+    st.stop()
 boot()
 
 pages = [

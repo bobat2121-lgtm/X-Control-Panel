@@ -50,14 +50,26 @@ def page(key: str) -> None:
     st.set_page_config(page_title=f"{name} · {kanji} · X Control Panel", page_icon=str(ICON_DIR / f"{icon}.png"))
 
 
-def boot() -> None:
-    """Copy Streamlit secrets into env (cloud), make sure the DB exists, style the page and raise the world."""
+def load_secrets() -> None:
+    """Copy Streamlit secrets into env (cloud)."""
     try:
         for k, v in st.secrets.items():
             if isinstance(v, (str, int, float, bool)) and not os.environ.get(k):
                 os.environ[k] = str(v)
     except Exception:  # no secrets.toml locally is fine
         pass
+
+
+def switched_off() -> None:
+    """The whole panel while the master switch is off (config.live): a notice, and nothing that reaches outside."""
+    st.markdown(_cached(CSS_PATH, lambda p: f"<style>{p.read_text(encoding='utf-8')}</style>"), unsafe_allow_html=True)
+    section("Switched off", "no APIs · no live feeds · no database")
+    st.info("The X Control Panel is switched off. It calls no APIs (X, Codex, Discord, GitHub), pulls no news or "
+            "market feeds and doesn't connect to its database on Neon. The scheduled runs are paused too.", icon="⏸")
+
+
+def boot() -> None:
+    """Make sure the DB exists, style the page and raise the world."""
     db.engine()
     st.markdown(_cached(CSS_PATH, lambda p: f"<style>{p.read_text(encoding='utf-8')}</style>"), unsafe_allow_html=True)
     # The world (panel/scene.js, our own file) runs in the page itself: it draws once per tab behind the panel and
